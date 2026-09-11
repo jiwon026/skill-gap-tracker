@@ -1,0 +1,295 @@
+{
+ "jobs": [
+  {
+   "absolute_url": "https://about.daangn.com?gh_jid=7666768003",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 5244070003,
+   "location": {
+    "name": "SEOUL"
+   },
+   "metadata": [
+    {
+     "id": 6128545003,
+     "name": "Corporate",
+     "value": "당근",
+     "value_type": "single_select"
+    },
+    {
+     "id": 6128573003,
+     "name": "Engineer",
+     "value": false,
+     "value_type": "yes_no"
+    },
+    {
+     "id": 5033980003,
+     "name": "Employment Type",
+     "value": "인턴",
+     "value_type": "single_select"
+    },
+    {
+     "id": 5784622003,
+     "name": "Alternative Civilian Service",
+     "value": false,
+     "value_type": "yes_no"
+    },
+    {
+     "id": 5784623003,
+     "name": "Prior Experience",
+     "value": "신입",
+     "value_type": "single_select"
+    },
+    {
+     "id": 6008744003,
+     "name": "Keywords",
+     "value": "account manager, am, 사업개발, 리텐션, B2B, intern, 인턴, Account Manager Intern",
+     "value_type": "short_text"
+    },
+    {
+     "id": 6015694003,
+     "name": "Slack Channel",
+     "value": "private-recruit-bdm",
+     "value_type": "single_select"
+    },
+    {
+     "id": 6972127003,
+     "name": "Valid Through",
+     "value": "",
+     "value_type": "date"
+    },
+    {
+     "id": 6990001003,
+     "name": "Order",
+     "value": "0.0",
+     "value_type": "number"
+    },
+    {
+     "id": 6990204003,
+     "name": "Tags",
+     "value": "D - 4",
+     "value_type": "short_text"
+    },
+    {
+     "id": 7142945003,
+     "name": "External Link",
+     "value": null,
+     "value_type": "url"
+    },
+    {
+     "id": 39612183003,
+     "name": "동료의 한마디",
+     "value": null,
+     "value_type": "long_text"
+    },
+    {
+     "id": 39968313003,
+     "name": "Division",
+     "value": "Business",
+     "value_type": "single_select"
+    },
+    {
+     "id": 40001867003,
+     "name": "related_post",
+     "value": "당근-프로덕트디자이너-채용-인터뷰,당근알바-성장-비결-okr-pmf,당근알바-탄생배경",
+     "value_type": "long_text"
+    },
+    {
+     "id": 40001868003,
+     "name": "related_post_external_link",
+     "value": null,
+     "value_type": "long_text"
+    },
+    {
+     "id": 40046619003,
+     "name": "related_job_post",
+     "value": "5913421003,6006363003,6552391003",
+     "value_type": "long_text"
+    }
+   ],
+   "id": 7666768003,
+   "updated_at": "2026-09-08T11:00:06-04:00",
+   "requisition_id": "808",
+   "title": "Account Manager (인턴) - 로컬 잡스",
+   "company_name": "당근마켓",
+   "first_published": "2026-03-29T11:00:00-04:00",
+   "language": "ko",
+   "application_deadline": null,
+   "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;h3&gt;당근 팀 합류 여정에 오르신 것을 진심으로 환영해요&lt;/h3&gt;\n&lt;p&gt;당근은 회사의 성장에 맞춰 개인이 함께 성장할 수 있는 환경을 만들기 위해 노력을 하고 있어요.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;멋진 동료들과 행복한 고민을 하는 그 순간이 올 수 있도록 당근 채용팀이 도와드릴게요.&lt;/p&gt;\n&lt;hr&gt;\n&lt;p&gt;&amp;nbsp;&lt;/p&gt;&lt;/div&gt;&lt;h3&gt;Enterprise를 소개해요&lt;/h3&gt;\n&lt;p&gt;Local Jobs는 국내에는 존재하지 않던 마켓플레이스를 만드는 팀이에요. 우리는 일자리를 찾는 방식을 완전히 새롭게 정의하고 있어요. 이웃과 이웃이 만나 동네라는 공간이 새로운 가능성이 되도록, 프로덕트 전문가들이 모여 당근의 비전을 이루기 위한 도전을 하고 있어요.&lt;/p&gt;\n&lt;p&gt;&lt;a href=&quot;https://daangn.notion.site/e28f9f5573c9487793fb71272dd2a729?pvs=4&quot; target=&quot;_blank&quot;&gt;🥕 Local Jobs 팀원을 소개해요&lt;/a&gt;&lt;/p&gt;\n&lt;p&gt;Enterprise 팀은 당근알",
+   "departments": [
+    {
+     "id": 4045614003,
+     "name": "Business",
+     "child_ids": [],
+     "parent_id": 4045612003
+    }
+   ],
+   "offices": [
+    {
+     "id": 4031936003,
+     "name": "당근",
+     "location": null,
+     "child_ids": [],
+     "parent_id": null
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  },
+  {
+   "absolute_url": "https://about.daangn.com?gh_jid=5458903003",
+   "data_compliance": [
+    {
+     "type": "gdpr",
+     "requires_consent": false,
+     "requires_processing_consent": false,
+     "requires_retention_consent": false,
+     "retention_period": null,
+     "demographic_data_consent_applies": false
+    }
+   ],
+   "internal_job_id": 4729362003,
+   "location": {
+    "name": "SEOUL"
+   },
+   "metadata": [
+    {
+     "id": 6128545003,
+     "name": "Corporate",
+     "value": "당근",
+     "value_type": "single_select"
+    },
+    {
+     "id": 6128573003,
+     "name": "Engineer",
+     "value": false,
+     "value_type": "yes_no"
+    },
+    {
+     "id": 5033980003,
+     "name": "Employment Type",
+     "value": "정규직",
+     "value_type": "single_select"
+    },
+    {
+     "id": 5784622003,
+     "name": "Alternative Civilian Service",
+     "value": false,
+     "value_type": "yes_no"
+    },
+    {
+     "id": 5784623003,
+     "name": "Prior Experience",
+     "value": "경력",
+     "value_type": "single_select"
+    },
+    {
+     "id": 6008744003,
+     "name": "Keywords",
+     "value": "대행사, 광고 대행사, 광고 세일즈, 세일즈 매니저, ad, sales, manager",
+     "value_type": "short_text"
+    },
+    {
+     "id": 6015694003,
+     "name": "Slack Channel",
+     "value": "private-recruit-ad",
+     "value_type": "single_select"
+    },
+    {
+     "id": 6972127003,
+     "name": "Valid Through",
+     "value": "",
+     "value_type": "date"
+    },
+    {
+     "id": 6990001003,
+     "name": "Order",
+     "value": "0.0",
+     "value_type": "number"
+    },
+    {
+     "id": 6990204003,
+     "name": "Tags",
+     "value": null,
+     "value_type": "short_text"
+    },
+    {
+     "id": 7142945003,
+     "name": "External Link",
+     "value": null,
+     "value_type": "url"
+    },
+    {
+     "id": 39612183003,
+     "name": "동료의 한마디",
+     "value": "> 에이전시 세일즈 매니저는 에이전시를 관리하는 걸 넘어, 함께 성장할 다양한 시도를 만들어 가는 역할이에요. 마케터들이 당근 광고를 자연스럽게 선택할 수 있도록 오프라인 행사, 어워즈, 콘텐츠 제작과 배포까지 직접 기획하고 실행해요.  아이디어가 실제 제안과 집행으로 이어지는 경험 속에서 일의 의미와 성장을 깊이 느낄 수 있고, 저 역시 그래요. 여러 아이템을 주도적으로 실행하고 끝까지 밀도 있게 가져가실 분이라면 당근에서 즐겁게 성장하실 수 있을 것 같아요!\n>\n> \\- Mattie, Sales Manager",
+     "value_type": "long_text"
+    },
+    {
+     "id": 39968313003,
+     "name": "Division",
+     "value": "Business",
+     "value_type": "single_select"
+    },
+    {
+     "id": 40001867003,
+     "name": "related_post",
+     "value": "당근-광고실-세일즈-커리어,당근-에이전시-세일즈-매니저-커리어",
+     "value_type": "long_text"
+    },
+    {
+     "id": 40001868003,
+     "name": "related_post_external_link",
+     "value": null,
+     "value_type": "long_text"
+    },
+    {
+     "id": 40046619003,
+     "name": "related_job_post",
+     "value": "4814736003,7516996003,7524793003",
+     "value_type": "long_text"
+    }
+   ],
+   "id": 5458903003,
+   "updated_at": "2026-08-28T13:04:57-04:00",
+   "requisition_id": "382",
+   "title": "AD Sales Manager - 광고 (세일즈, Agency)",
+   "company_name": "당근마켓",
+   "first_published": "2022-12-27T04:10:06-05:00",
+   "language": "ko",
+   "application_deadline": null,
+   "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;h3&gt;당근 팀 합류 여정에 오르신 것을 진심으로 환영해요&lt;/h3&gt;\n&lt;p&gt;당근은 회사의 성장에 맞춰 개인이 함께 성장할 수 있는 환경을 만들기 위해 노력을 하고 있어요.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;멋진 동료들과 행복한 고민을 하는 그 순간이 올 수 있도록 당근 채용팀이 도와드릴게요.&lt;/p&gt;\n&lt;hr&gt;\n&lt;p&gt;&amp;nbsp;&lt;/p&gt;&lt;/div&gt;&lt;h3&gt;광고 세일즈팀을 소개해요&lt;/h3&gt;\n&lt;p&gt;당근 광고 세일즈팀은 &lt;strong&gt;비즈니스 성장의 엔진 역할을 수행하고 있어요. &lt;br&gt;&lt;/strong&gt;전국 수천만 사용자의 생활 속에서 광고주와 소비자가 더 깊이 연결될 수 있도록 돕고 있으며, &lt;br&gt;브랜드와 광고 대행사까지 다양한 파트너를 대상으로 &lt;strong&gt;성과 중심의 광고 솔루션&lt;/strong&gt;을 제공하고 있어요.&lt;br&gt;데이터 기반의 인사이트, 시장 이해, 그리고 빠른 실행력을 바탕으로 광고 효율을 극대화하며, &lt;br&gt;변화하는 환경에&amp;nbsp;맞춰 끊임없이 실험하고 성장하는 팀이에요.&lt;br&gt;우리는 단순한 영업을 넘어, &",
+   "departments": [
+    {
+     "id": 4045613003,
+     "name": "Sales",
+     "child_ids": [],
+     "parent_id": 4045612003
+    }
+   ],
+   "offices": [
+    {
+     "id": 4031936003,
+     "name": "당근",
+     "location": null,
+     "child_ids": [],
+     "parent_id": null
+    }
+   ],
+   "ai_disclaimer": null,
+   "include_ai_disclaimer": null,
+   "ai_opt_out_request_url": null
+  }
+ ],
+ "meta": {
+  "total": 2
+ }
+}

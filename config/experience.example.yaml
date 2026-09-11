@@ -1,0 +1,102 @@
+# config/experience.yaml 템플릿.
+#
+# 이 파일을 experience.yaml 로 복사한 뒤 본인 경험으로 채운다. 원본은
+# 개인 정보라 .gitignore 로 제외되어 있고, 이 예시만 저장소에 남는다.
+#
+#     cp config/experience.example.yaml config/experience.yaml
+#
+# 필드가 하는 일
+#
+#   kind     project 또는 activity. 정렬에서 project 만 센다 — 활동 경험은
+#            거의 모든 공고에 걸려서 함께 세면 순위를 가르지 못한다.
+#
+#   proves   이 경험이 증명하는 스킬 id. profile.yaml 의 보유 스킬에 더해진다.
+#            도구는 profile.yaml 에, 그 도구로 무엇을 했는지는 여기에.
+#            이걸 빠뜨리면 실제로 해 본 분석까지 '부족 스킬'로 잡힌다.
+#            id 는 config/skills.yaml 에 있어야 한다 — 없으면 실행 시 에러가 난다.
+#
+#   signals  공고에 이 말이 나오면 이 경험으로 어필할 수 있다는 신호.
+#            제목과 본문을 함께 본다. 스킬 사전과 달리 느슨해도 된다 —
+#            틀려도 어필 후보가 하나 늘 뿐, 지표를 왜곡하지 않는다.
+#
+#   pitch    Notion 의 '어필 포인트'에 그대로 실린다. 자소서 첫 문장에
+#            쓸 수 있을 만큼 구체적으로 — 무엇을 발견했고 무엇을 했는지.
+#
+# signals 를 고를 때
+#   모든 공고에 있는 말은 신호가 아니다. '협업'·'커뮤니케이션'·'성장'·
+#   '최적화'·'고객' 같은 상투어를 넣으면 전 공고에 걸려서, 어느 경험으로
+#   어필할지 가려 주지 못한다. **이 경험이 실제로 답이 되는 문구만** 남긴다.
+
+experiences:
+  # 아래는 형식을 보여 주는 더미다. 테스트도 이 파일로 돈다.
+  - id: retention_analysis
+    kind: project
+    name: 예시 — 퍼널·리텐션 분석
+    period: 2026.01~2026.02
+    pitch: >-
+      무엇을 발견했고 그래서 무엇을 제안했는지 한 문장으로. 숫자가 있으면
+      넣는다. "분석했다"로 끝내지 말고 "그래서 무엇이 바뀌었나"까지 적는다.
+    proves: [sql, funnel, retention]
+    signals:
+      - 퍼널
+      - 전환율
+      - 리텐션
+      - 코호트
+      - 이탈
+      - 온보딩
+
+  - id: segment_model
+    kind: project
+    name: 예시 — 고객 세그먼트·예측 모델
+    period: 2025.09~2025.12
+    pitch: >-
+      어떤 고객을 어떤 기준으로 나눴고, 그 결과를 누가 어떻게 쓸 수 있게
+      만들었는지. 모델 성능 지표가 있으면 함께 적는다.
+    proves: [python, rfm, statistics]
+    signals:
+      - 세그먼테이션
+      - 세그먼트
+      - 예측 모델
+      - 이탈 예측
+      - 머신러닝
+
+  - id: text_analysis
+    kind: project
+    name: 예시 — 리뷰 텍스트 분석
+    period: 2025.03~2025.06
+    pitch: >-
+      비정형 데이터를 어떻게 정리했고, 그 결과로 어떤 판단을 도왔는지.
+      데이터 규모와 쓴 방법을 함께 적는다.
+    proves: [python]
+    signals:
+      - 리뷰
+      - VOC
+      - 텍스트
+      - 키워드
+      - 감성 분석
+
+  - id: data_pipeline
+    kind: project
+    name: 예시 — 데이터 수집 파이프라인
+    period: 2025.10~2025.12
+    pitch: >-
+      무엇을 자동화했고 그 전후로 무엇이 달라졌는지. 매일 도는지, 실패를
+      어떻게 알아채는지처럼 운영 관점도 적는다.
+    proves: [python, etl]
+    signals:
+      - 파이프라인
+      - API
+      - 데이터 수집
+      - 자동화
+
+  - id: club_activity
+    kind: activity
+    name: 예시 — 동아리·대외활동
+    period: 2025.03~2025.12
+    pitch: >-
+      직무와 직접 이어지지 않는 경험이라도, 어떤 방식으로 일하는 사람인지를
+      보여줄 수 있으면 적는다.
+    proves: []
+    signals:
+      - 문서화
+      - 표준화

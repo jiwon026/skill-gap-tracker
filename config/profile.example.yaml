@@ -1,0 +1,30 @@
+# config/profile.yaml 템플릿.
+#
+# 이 파일을 profile.yaml 로 복사한 뒤 본인 내용으로 채운다. profile.yaml 은
+# 개인 정보라 .gitignore 로 제외되어 있고, 이 예시만 저장소에 남는다.
+#
+#     cp config/profile.example.yaml config/profile.yaml
+#
+# 규칙
+#   - id 는 config/skills.yaml 에 있는 스킬 id 여야 한다. 없는 id 를 쓰면
+#     그 줄이 조용히 무시되어 갭이 실제보다 나쁘게 나온다.
+#   - level 은 갭 계산에 쓰이지 않는다. 판정은 보유/미보유 이진이다.
+#     "수준을 반영할지"를 나중에 논의하기 위한 기록일 뿐이다.
+#   - context 도 계산에 쓰이지 않는다. 나중에 이 줄을 왜 적었는지
+#     본인이 알아보기 위한 메모다.
+#
+# 여기 적는 것은 **도구**다. 그 도구로 수행한 분석 방법(퍼널·리텐션·
+# 세그먼테이션 등)은 config/experience.yaml 의 `proves` 가 자동으로 더해 준다.
+# 같은 것을 두 군데 적지 않는다.
+skills:
+  - id: sql
+    level: 사용
+    context: 어디에 어떻게 썼는지 한 줄로
+
+  - id: python
+    level: 사용
+    context: 전처리·모델링·시각화 중 실제로 해 본 것
+
+  - id: excel
+    level: 기본
+    context: 계산에 쓰이지 않는 메모다. 편하게 적는다

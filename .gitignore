@@ -1,0 +1,32 @@
+# --- 개인 설정 ---
+# 보유 스킬·프로젝트 경험·지원 대상 회사. 저장소에는 같은 형식의 더미
+# (*.example.yaml)만 두고, run.py 는 개인 파일이 없으면 더미로 돈다.
+config/profile.yaml
+config/experience.yaml
+config/companies.yaml
+
+# --- 수집 데이터 ---
+# 사람인 약관이 수집 데이터의 재배포를 금지한다. 스냅샷·원본 캐시에
+# 그 데이터가 섞여 있으므로 store/ 를 통째로 제외한다.
+# 디렉터리는 run.py 가 실행 시 만들므로 .gitkeep 이 필요 없다.
+store/
+
+# --- 개인용 수집기 ---
+# 공개 저장소의 수집기는 공개 API 만 쓴다. 그 밖의 개인용 수집기는
+# collect/local/ 에 두며 저장소에 넣지 않는다. run.py 가 자동으로 붙이고,
+# 폴더가 없으면 공개 소스만으로 돈다.
+collect/local/
+tests/local/
+
+# --- 로컬 작업 메모 ---
+CLAUDE.md
+
+# --- 자격증명 ---
+.env
+*.key
+
+# --- 파이썬 ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/

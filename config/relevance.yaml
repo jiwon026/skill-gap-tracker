@@ -1,0 +1,115 @@
+# 데이터 직군 판정 사전.
+#
+# 공고 제목과 부서명만 본다. 본문에는 "데이터 기반으로 일합니다" 같은 문장이
+# 어느 회사에나 있어서, 본문까지 보면 전 직군이 통과한다.
+#
+# 매칭 규칙은 config/skills.yaml과 같다 — 공백은 가변 공백으로 풀리므로
+# '데이터 엔지니어'가 '데이터엔지니어링'을 잡는다. 영문은 단어 경계를 지킨다.
+#
+# core     보유 스킬(SQL·Amplitude·Tableau·퍼널/리텐션)이 그대로 쓰이는 직무.
+#          하나라도 걸리면 대상이다.
+# exclude  core 보다 먼저 본다. 제목이 걸리면 공고 전체, 부서가 걸리면 그 부서만 뺀다.
+#
+# 예전에는 adjacent(참고용 직군) 단계가 있었다. 개발·연구직을 수집에서 빼면서
+# 비었고(2026-09-09), 2026-09-11에 없앴다. 이 키를 다시 적으면 실행이 멈춘다.
+
+core:
+  - 데이터 분석
+  - 데이터 애널리스트
+  - Data Analyst
+  - Data Analytics
+  - Business Analyst
+  - Product Analyst
+  - 프로덕트 애널리스트
+  - 프로덕트 분석
+  - 서비스 분석
+  - 그로스 분석
+  - Growth Analyst
+  - 데이터 과학
+  - Data Scientist
+  - 데이터 사이언
+  - BI
+  - Business Intelligence
+  - 비즈니스 인텔리전스
+  - 인사이트 분석
+  - 로그 분석
+  - CRM 분석
+  - 마케팅 분석
+  - Marketing Analyst
+  - Analytics
+  # 한글 단독 '분석가'. 보안·재무 분석가가 함께 걸리므로 exclude에서 되돌린다
+  - 분석가
+  - Data Insights
+  - 데이터 인사이트
+
+# 위 키워드를 품고 있어도 대상이 아닌 것들. core보다 먼저 판정한다.
+exclude:
+  - 데이터센터
+  - Data Center
+  - 데이터베이스 관리자
+  - DBA
+  - 데이터 라벨링
+  - 어노테이션
+  - Annotation
+  # 회사가 채용 사이트에 남겨 두는 상시/더미 항목
+  - 인재풀
+  - Talent Pool
+  - z-Test
+  # 병역특례 전용 트랙. 해당자만 지원할 수 있어 대상에서 뺀다.
+  # 단어가 아니라 태그 형태만 거른다 — '데이터 분석가 (병역특례 가능)'은
+  # 누구나 지원하는 일반 공고라서 남아야 한다. 부서(공채 세부 직무)에
+  # 붙어 있으면 그 부서만 빠지고 나머지 직무는 남는다.
+  - "[병역특례]"
+  - "(병역특례)"
+  - "[전문연구요원]"
+  - "(전문연구요원)"
+  - "[산업기능요원]"
+  - "(산업기능요원)"
+  - Technical Research Personnel
+  # '분석가'를 core에 넣으면서 함께 딸려오는 다른 직군들.
+  # 분석이라는 말을 쓰지만 보유 스킬과 접점이 없다.
+  - Security Analyst
+  - 보안 분석
+  - Financial Planning
+  - FP&A
+  - 재무 분석
+  - Credit Analyst
+  # ── 개발·연구직 ────────────────────────────────────────
+  # 스킬은 겹치지만 직무가 다르다. 36건 중 19건이 여기였다.
+  # 수집 대상이 아니다(2026-09-09 결정). 'Analytics Engineer' 같은 제목이
+  # core 의 짧은 항목('Analytics')으로 새어 들어오는 것도 여기서 막는다.
+  - 엔지니어
+  - Engineer
+  - 개발자
+  - Developer
+  - 데이터 엔지니어
+  - Data Engineer
+  - Analytics Engineer
+  - 데이터 플랫폼
+  - Data Platform
+  - Machine Learning
+  - 머신러닝
+  - Applied Scientist
+  - Research Scientist
+  - Software
+  - Backend
+  - Frontend
+  - 데이터 품질
+  - Data Quality
+  - 추천 시스템
+  - Recommendation
+  # 'BI'가 브랜드 아이덴티티(BI/BX)로 쓰이는 직군.
+  - 디자이너
+  - Designer
+  - BX
+  # 한국어 '분석가'는 전 산업에 걸친다. core에 넣은 대가로 딸려오는 것들을
+  # 여기서 되돌린다. 새 오탐이 보이면 이 목록에 추가한다.
+  - 회계 분석
+  - 물류 분석가
+  - 리스크 분석
+  - 품질 분석가
+  - 투자 분석
+  - 영업 분석
+  - 신용 분석
+  - 손해사정
+  - 심사역

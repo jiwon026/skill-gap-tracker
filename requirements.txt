@@ -1,0 +1,15 @@
+# Skill Gap Tracker 의존성. 버전을 고정하는 이유는 이 프로젝트가 재현성을 근거로
+# LLM 대신 사전 기반 추출을 택했기 때문이다. 실행 환경이 흔들리면 그 근거가
+# 약해진다.
+#
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+#
+# 표준 라이브러리로 충분한 곳에서는 패키지를 쓰지 않는다. HTTP는 urllib,
+# HTML 정제는 re + html 로 처리하므로 requests·beautifulsoup4 가 없다.
+
+# --- 런타임 ---
+PyYAML==6.0.3
+
+# --- 개발 ---
+# 로컬 스케줄러로 도는 개인 도구라 런타임과 한 파일에 둔다.
+pytest==9.1.1

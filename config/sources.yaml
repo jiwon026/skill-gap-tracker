@@ -1,0 +1,51 @@
+# 확인된 Greenhouse 보드. 괄호 안은 2026-09-09 실측 (한국 × 데이터 직군 건수).
+# 토큰 40여 개를 훑어 200이 뜨고 공고가 실제로 존재하는 보드만 남겼다.
+# toss·kurly·musinsa·baemin·오늘의집·지그재그는 Greenhouse·Ashby 어디에도 없다.
+# 2026-09-10 연결 해제. 데이터 직무가 전부 경력직이었고 신입 공고는
+# Greenhouse 밖에만 있었다. 보드를 다 끈다.
+# 코드는 남겨 둔다 — 다시 쓰려면 enabled 를 true 로 바꾸면 된다.
+greenhouse:
+  - token: coupang
+    company: 쿠팡
+    domain: ecommerce
+    enabled: false       # 38건 — 1순위 타겟
+  - token: daangn
+    company: 당근
+    domain: ecommerce
+    enabled: false       # 6건
+  - token: moloco
+    company: 몰로코
+    domain: adtech      # 커머스 인접. 어트리뷰션·측정 스킬이 겹친다
+    enabled: false       # 5건
+  - token: krafton
+    company: 크래프톤
+    domain: gaming      # 도메인 불일치. 표본이 필요할 때만 켠다
+    enabled: false      # 8건
+  - token: sendbird
+    company: 센드버드
+    domain: saas
+    enabled: false      # 1건
+
+# 자체 채용 API. 목록에 본문이 없어 공고마다 상세를 한 번 더 부른다.
+# 국내 이커머스 대기업 중 공개 JSON API가 안정적으로 열려 있는 드문 경우다.
+woowahan:
+  - company: 우아한형제들
+    domain: ecommerce
+    enabled: true       # 53건 (전 직군)
+
+# 사람인 오픈API. 국내 중견·대기업 커버리지의 주력 소스다.
+# SARAMIN_ACCESS_KEY 환경변수가 없으면 경고만 남기고 통째로 건너뛴다.
+# 하루 500콜 제한이 있어 키워드 수를 함부로 늘리면 안 된다.
+saramin:
+  - keyword: 데이터 분석
+    domain: ecommerce
+    enabled: true
+  - keyword: 데이터 분석가
+    domain: ecommerce
+    enabled: true
+  - keyword: 프로덕트 애널리스트
+    domain: ecommerce
+    enabled: true
+  - keyword: 그로스 분석
+    domain: ecommerce
+    enabled: false      # 표본이 필요할 때만 켠다. 콜 예산이 빠듯하다

@@ -1,0 +1,240 @@
+# 이커머스 프로덕트·그로스 데이터 직무 스킬 사전.
+#
+# 이 파일이 프로젝트의 핵심 자산이다. 별칭 매핑은 그 분야를 아는 사람만
+# 쓸 수 있고, 사전을 직접 큐레이션한 것 자체가 도메인 지식의 증거가 된다.
+#
+# 매칭 규칙
+#   - aliases 는 대소문자를 구분하지 않고, 영문은 단어 경계를 지켜 찾는다.
+#   - pattern 을 주면 aliases 대신 그 정규식을 쓴다. R·Go 처럼 짧아서
+#     오탐이 나는 스킬에만 쓴다.
+#   - id 는 config/profile.yaml 의 보유 스킬 id 와 맞물린다.
+
+skills:
+  # ── 쿼리·언어 ───────────────────────────────────────────
+  - id: sql
+    name: SQL
+    category: query
+    aliases: [SQL, 에스큐엘]
+  - id: python
+    name: Python
+    category: language
+    aliases: [Python, 파이썬]
+  - id: r
+    name: R
+    category: language
+    # 'R&D', 'R&R', 'HR' 오탐을 막는다. 단독 R 또는 R 언어 표기만 잡는다.
+    pattern: '(?<![\w&])R(?![\w&])(?=\s*(?:언어|programming|\)|,|/|$))|R\s*언어|\bRStudio\b'
+  - id: scala
+    name: Scala
+    category: language
+    aliases: [Scala, 스칼라]
+  - id: java
+    name: Java
+    category: language
+    pattern: '\bJava\b(?!\s*Script)'
+
+  # ── 데이터 웨어하우스·엔진 ───────────────────────────────
+  - id: bigquery
+    name: BigQuery
+    category: warehouse
+    aliases: [BigQuery, "Big Query", 빅쿼리]
+  - id: snowflake
+    name: Snowflake
+    category: warehouse
+    aliases: [Snowflake, 스노우플레이크]
+  - id: redshift
+    name: Redshift
+    category: warehouse
+    aliases: [Redshift, 레드시프트]
+  - id: databricks
+    name: Databricks
+    category: warehouse
+    aliases: [Databricks, 데이터브릭스]
+  - id: spark
+    name: Apache Spark
+    category: engine
+    aliases: [Spark, PySpark, 스파크]
+  - id: hadoop
+    name: Hadoop
+    category: engine
+    aliases: [Hadoop, 하둡, HDFS]
+  - id: hive
+    name: Hive
+    category: engine
+    aliases: [Hive, 하이브]
+  - id: presto
+    name: Presto / Trino
+    category: engine
+    aliases: [Presto, Trino, Athena]
+  - id: postgres
+    name: PostgreSQL
+    category: warehouse
+    aliases: [PostgreSQL, Postgres, 포스트그레]
+  - id: clickhouse
+    name: ClickHouse
+    category: engine
+    aliases: [ClickHouse, 클릭하우스]
+  - id: elasticsearch
+    name: Elasticsearch
+    category: engine
+    aliases: [Elasticsearch, ElasticSearch, 엘라스틱서치, OpenSearch]
+
+  # ── 파이프라인 ──────────────────────────────────────────
+  - id: airflow
+    name: Apache Airflow
+    category: pipeline
+    aliases: [Airflow, "Apache Airflow", 에어플로우, 에어플로]
+  - id: dbt
+    name: dbt
+    category: pipeline
+    pattern: '\bdbt\b'
+  - id: kafka
+    name: Kafka
+    category: pipeline
+    aliases: [Kafka, 카프카]
+  - id: flink
+    name: Flink
+    category: pipeline
+    aliases: [Flink, 플링크]
+  - id: etl
+    name: ETL / ELT
+    category: pipeline
+    aliases: [ETL, ELT, "데이터 파이프라인", 데이터파이프라인]
+
+  # ── BI·시각화 ──────────────────────────────────────────
+  - id: tableau
+    name: Tableau
+    category: bi
+    aliases: [Tableau, 태블로]
+  - id: looker
+    name: Looker
+    category: bi
+    aliases: [Looker, LookML, 루커]
+  - id: powerbi
+    name: Power BI
+    category: bi
+    aliases: ["Power BI", PowerBI, 파워비아이]
+  - id: superset
+    name: Apache Superset
+    category: bi
+    aliases: [Superset, 슈퍼셋]
+  - id: redash
+    name: Redash
+    category: bi
+    aliases: [Redash, 리대시]
+  - id: quicksight
+    name: QuickSight
+    category: bi
+    aliases: [QuickSight]
+  - id: streamlit
+    name: Streamlit
+    category: bi
+    aliases: [Streamlit, 스트림릿]
+
+  # ── 프로덕트 분석 ───────────────────────────────────────
+  - id: amplitude
+    name: Amplitude
+    category: product_analytics
+    aliases: [Amplitude, 앰플리튜드, 엠플리튜드]
+  - id: mixpanel
+    name: Mixpanel
+    category: product_analytics
+    aliases: [Mixpanel, 믹스패널]
+  - id: ga4
+    name: GA4 / Google Analytics
+    category: product_analytics
+    aliases: [GA4, "Google Analytics", "구글 애널리틱스", 구글애널리틱스, "Universal Analytics"]
+  - id: firebase
+    name: Firebase
+    category: product_analytics
+    aliases: [Firebase, 파이어베이스]
+  - id: appsflyer
+    name: AppsFlyer
+    category: product_analytics
+    aliases: [AppsFlyer, Adjust, Airbridge, 에어브릿지, 앱스플라이어]
+  - id: braze
+    name: Braze / CRM 자동화
+    category: product_analytics
+    aliases: [Braze, Iterable, "CRM 마케팅", 브레이즈]
+
+  # ── 실험·분석 방법론 ────────────────────────────────────
+  - id: ab_test
+    name: A/B 테스트
+    category: method
+    aliases: ["A/B", AB테스트, "A/B 테스트", 에이비테스트, "split test", 대조군, 실험설계, "실험 설계"]
+  - id: statistics
+    name: 통계 검정
+    category: method
+    aliases: [가설검정, "가설 검정", 통계검정, "통계 검정", "statistical significance", 유의수준, 회귀분석]
+  - id: funnel
+    name: 퍼널 분석
+    category: method
+    aliases: [퍼널, funnel, 전환율, "conversion rate"]
+  - id: retention
+    name: 리텐션·코호트
+    category: method
+    aliases: [리텐션, retention, 코호트, cohort, 재방문율]
+  - id: ltv
+    name: LTV / 유닛 이코노믹스
+    category: method
+    aliases: [LTV, LTV/CAC, CAC, ARPU, ARPPU, 객단가, "unit economics"]
+  - id: rfm
+    name: RFM / 세그먼테이션
+    category: method
+    aliases: [RFM, 세그먼테이션, "세그먼트 분석", segmentation]
+  - id: attribution
+    name: 어트리뷰션
+    category: method
+    aliases: [어트리뷰션, attribution, "기여도 분석", MMM]
+
+  # ── ML ────────────────────────────────────────────────
+  - id: sklearn
+    name: scikit-learn
+    category: ml
+    aliases: [scikit-learn, sklearn, 사이킷런]
+  - id: tensorflow
+    name: TensorFlow / PyTorch
+    category: ml
+    aliases: [TensorFlow, PyTorch, 텐서플로우, 파이토치]
+  - id: gbm
+    name: XGBoost / LightGBM
+    category: ml
+    aliases: [XGBoost, LightGBM, CatBoost]
+  - id: recsys
+    name: 추천 시스템
+    category: ml
+    aliases: [추천시스템, "추천 시스템", "recommendation system", "recommender"]
+  - id: llm
+    name: LLM / 생성형 AI
+    category: ml
+    aliases: [LLM, "생성형 AI", GenAI, "Generative AI", RAG, 프롬프트]
+
+  # ── 인프라·협업 ────────────────────────────────────────
+  - id: aws
+    name: AWS
+    category: cloud
+    aliases: [AWS, "Amazon Web Services"]
+  - id: gcp
+    name: GCP
+    category: cloud
+    aliases: [GCP, "Google Cloud"]
+  - id: git
+    name: Git
+    category: tooling
+    aliases: [Git, GitHub, GitLab, 깃허브]
+  - id: docker
+    name: Docker / Kubernetes
+    category: tooling
+    aliases: [Docker, Kubernetes, K8s, 도커, 쿠버네티스]
+  - id: excel
+    name: Excel / 스프레드시트
+    category: tooling
+    aliases: [Excel, 엑셀, "Google Sheets", 스프레드시트]
+  - id: notion
+    name: Notion
+    category: tooling
+    aliases: [Notion, 노션]
+  - id: jira
+    name: Jira / Confluence
+    category: tooling
+    aliases: [Jira, Confluence, 지라, 컨플루언스]

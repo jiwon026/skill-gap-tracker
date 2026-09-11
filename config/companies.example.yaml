@@ -1,0 +1,46 @@
+# config/companies.yaml 템플릿 — 지원 대상 회사 화이트리스트.
+#
+# 이 파일을 companies.yaml 로 복사한 뒤 본인이 지원할 회사로 채운다.
+# companies.yaml 은 지원 대상 목록이라 .gitignore 로 제외되어 있고, 이
+# 예시만 저장소에 남는다. 아래 회사는 별칭 묶기가 어떻게 동작하는지
+# 보여 주기 위한 예시다.
+#
+#     cp config/companies.example.yaml config/companies.yaml
+#
+# 쓰이는 곳
+#   1. 사람인처럼 전 산업 공고가 섞여 오는 소스를 회사명으로 좁힌다.
+#   2. 우선순위 — 여기 없는 회사는 한 단계 내린다(analyze/priority.py).
+#   3. Notion '규모' 열 — 여기 적은 tier 가 소스 회사 정보보다 이긴다.
+#
+# aliases 는 공고에 실제로 찍히는 표기다. 계열사명(쿠팡풀필먼트서비스, CLS)으로
+# 공고를 올리는 회사가 많아, 법인명을 빠짐없이 적어야 놓치지 않는다.
+# 매칭은 config/skills.yaml 과 같은 규칙을 쓴다 — 영문은 단어 경계를 지킨다.
+#
+# tier     대기업 / 중견
+# segment  참고값이다. 필터에는 관여하지 않는다.
+
+companies:
+  - name: 쿠팡
+    tier: 대기업
+    segment: 종합몰
+    aliases: [쿠팡, Coupang, 쿠팡풀필먼트서비스, 쿠팡로지스틱스서비스, 쿠팡이츠, Coupang Eats, CFS, CLS, CES]
+  - name: 신세계그룹
+    tier: 대기업
+    segment: 종합몰
+    aliases: [SSG, SSG.COM, 쓱닷컴, 신세계, 이마트, 지마켓, G마켓, Gmarket, 옥션]
+  - name: 우아한형제들
+    tier: 대기업
+    segment: 배달·퀵커머스
+    aliases: [우아한형제들, 배달의민족, 배민, Woowa Brothers, 우아한형제들주식회사]
+  - name: 컬리
+    tier: 대기업
+    segment: 신선식품
+    aliases: [컬리, 마켓컬리, Kurly, 컬리넥스트마일]
+  - name: 무신사
+    tier: 중견
+    segment: 패션
+    aliases: [무신사, MUSINSA, 29CM, 이십구센티미터, 무신사스토어]
+  - name: 당근
+    tier: 중견
+    segment: 중고거래
+    aliases: [당근, 당근마켓, 당근서비스, daangn, Karrot]

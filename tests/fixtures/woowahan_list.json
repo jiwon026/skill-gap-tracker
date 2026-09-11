@@ -1,0 +1,78 @@
+{
+ "code": "2000",
+ "message": "OK",
+ "data": {
+  "pageSize": 20,
+  "pageNumber": 1,
+  "totalPageNumber": 1,
+  "totalSize": 3,
+  "list": [
+   {
+    "recruitSeq": 25753,
+    "recruitNumber": "R2609008",
+    "recruitName": "데이터엔지니어링(데이터서비스 AI)",
+    "recruitOpenDate": "2026-09-09 00:24:28",
+    "recruitEndDate": "9999-12-31 00:00:00",
+    "recruitCorporationNumber": "WOOWA_BROTHERS",
+    "careerRestrictionMinYears": 5,
+    "careerRestrictionMaxYears": 20,
+    "jobGroup": {
+     "recruitItemGroupCode": "BA005",
+     "recruitItemCode": "BA005001",
+     "primary": false
+    },
+    "employmentType": {
+     "recruitItemGroupCode": "BA002",
+     "recruitItemCode": "BA002001",
+     "primary": false
+    },
+    "recruitContents": null,
+    "isHidden": false
+   },
+   {
+    "recruitSeq": 25760,
+    "recruitNumber": "R2609012",
+    "recruitName": "배민 기존업주 영업관리(리더급/대전광주)",
+    "recruitOpenDate": "2026-09-09 14:57:04",
+    "recruitEndDate": "9999-12-31 00:00:00",
+    "recruitCorporationNumber": "WOOWA_BROTHERS",
+    "careerRestrictionMinYears": 7,
+    "careerRestrictionMaxYears": 15,
+    "jobGroup": {
+     "recruitItemGroupCode": "BA005",
+     "recruitItemCode": "BA005014",
+     "primary": false
+    },
+    "employmentType": {
+     "recruitItemGroupCode": "BA002",
+     "recruitItemCode": "BA002001",
+     "primary": false
+    },
+    "recruitContents": null,
+    "isHidden": false
+   },
+   {
+    "recruitSeq": 25761,
+    "recruitNumber": "R2608020",
+    "recruitName": "사업관리(딜리버리)",
+    "recruitOpenDate": "2026-08-25 18:20:42",
+    "recruitEndDate": "9999-12-31 00:00:00",
+    "recruitCorporationNumber": "WOOWA_BROTHERS",
+    "careerRestrictionMinYears": 3,
+    "careerRestrictionMaxYears": 10,
+    "jobGroup": {
+     "recruitItemGroupCode": "BA005",
+     "recruitItemCode": "BA005013",
+     "primary": false
+    },
+    "employmentType": {
+     "recruitItemGroupCode": "BA002",
+     "recruitItemCode": "BA002001",
+     "primary": false
+    },
+    "recruitContents": null,
+    "isHidden": false
+   }
+  ]
+ }
+}
