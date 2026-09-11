@@ -75,6 +75,37 @@ cp config/companies.example.yaml  config/companies.yaml    # 지원 대상 회�
 | `NOTION_TOKEN`, `NOTION_DATABASE_ID` | Notion 적재를 건너뛰고 콘솔 출력까지만 |
 | `SARAMIN_ACCESS_KEY` | 사람인을 건너뛴다 |
 
+### Notion 준비
+
+결과를 받을 Notion DB가 있어야 한다. 열 구성은 스크립트가 만든다.
+
+1. [Notion 인테그레이션 페이지](https://www.notion.so/my-integrations)에서 내부 인테그레이션을 만들고 토큰을 `NOTION_TOKEN`에 넣는다.
+2. DB를 둘 페이지를 하나 만들고, 페이지 오른쪽 위 `⋯` → 연결에서 방금 만든 인테그레이션을 추가한다. 이걸 빠뜨리면 404가 난다.
+3. 아래 명령으로 DB를 만든다. 출력되는 DB ID를 `NOTION_DATABASE_ID`에 넣는다.
+
+```bash
+.venv/Scripts/python setup_notion.py "<페이지 URL>"            # 이름을 바꾸려면 --title "내 지원 보드"
+```
+
+만들어지는 열은 14개다. 이름이 한 글자라도 다르면 적재가 실패하므로 손으로 고치지 않는다.
+
+| 열 | 종류 | 누가 쓰나 |
+|---|---|---|
+| 공고명 | 제목 | 파이프라인 |
+| 회사 | 선택 | 파이프라인 |
+| 규모 | 선택 | 파이프라인. 대기업·중견·중소·스타트업·기타 |
+| 우선순위 | 선택 | 파이프라인. 높음·중간·낮음 |
+| 지역 | 텍스트 | 파이프라인 |
+| 마감 | 텍스트 | 파이프라인. 날짜 또는 '상시채용' 등 |
+| 보유 스킬 | 다중 선택 | 파이프라인 |
+| 부족 스킬 | 다중 선택 | 파이프라인 |
+| 어필 경험 | 다중 선택 | 파이프라인 |
+| 어필 포인트 | 텍스트 | 파이프라인 |
+| URL | URL | 파이프라인 |
+| 상태 | 선택 | 사용자. 새 행에만 '신규'가 들어가고 그 뒤로는 덮어쓰지 않는다 |
+| key | 텍스트 | 파이프라인. 행을 찾는 키라 지우면 안 된다. 보기에서 숨기는 건 괜찮다 |
+| 공고 현황 | 선택 | 파이프라인. 모집중·제외됨·마감 |
+
 ```bash
 .venv/Scripts/python check_notion.py   # Notion DB 속성이 코드와 맞는지 먼저 확인
 .venv/Scripts/python run.py            # 파이프라인 전체
@@ -104,4 +135,5 @@ report/     Notion 적재
 config/     스킬 사전·판정 규칙·소스 목록, 개인 설정 예시
 tests/      계층별 단위 테스트와 파이프라인 조립 테스트
 run.py      진입점
+setup_notion.py / check_notion.py   Notion DB 만들기 / 연결·열 구성 점검
 ```
