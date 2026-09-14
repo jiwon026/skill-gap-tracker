@@ -17,9 +17,20 @@ Set-Location $root
 $logDir = Join-Path $root 'store\logs'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
+$utf8 = New-Object System.Text.UTF8Encoding($false)   # BOM 없이
+
+# 스케줄러는 08:00 말고도 로그인, 절전 해제 때 이 파일을 부른다(놓친 실행 따라잡기).
+# 그래서 하루에 여러 번 불릴 수 있고, 오늘 성공한 실행이 있으면 로그도 남기지 않고
+# 끝낸다. 실패한 실행은 세지 않는다. 다음 기회에 다시 돌아야 하기 때문이다.
+$today = Get-Date -Format 'yyyy-MM-dd'
+$doneToday = Get-ChildItem -Path $logDir -Filter "${today}_*.log" -ErrorAction SilentlyContinue |
+    Where-Object { [System.IO.File]::ReadAllText($_.FullName, $utf8) -match '종료 코드 0\s*$' }
+if ($doneToday) {
+    exit 0
+}
+
 $stamp   = Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $logFile = Join-Path $logDir "$stamp.log"
-$utf8    = New-Object System.Text.UTF8Encoding($false)   # BOM 없이
 
 function Write-Log([string]$line) {
     [System.IO.File]::AppendAllText($logFile, "$line`r`n", $utf8)
