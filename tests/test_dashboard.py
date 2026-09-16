@@ -10,6 +10,7 @@ from analyze.gap import AnalyzedPosting, Gap
 from analyze.skill_board import SkillRow
 from collect.schema import Posting
 from report.dashboard import (
+    CARD_LABELS,
     MISSING,
     OWNED,
     SKILL_DB_PROPERTIES,
@@ -35,14 +36,33 @@ def heading(block_id, text, level=2):
     return {"id": block_id, "type": kind, kind: {"rich_text": [{"plain_text": text}]}}
 
 
-def block(block_id, kind="paragraph"):
-    return {"id": block_id, "type": kind, kind: {"rich_text": []}}
+def block(block_id, kind="paragraph", text=""):
+    return {"id": block_id, "type": kind, kind: {"rich_text": [{"plain_text": text}] if text else []}}
+
+
+def caption(block_id, date="2026-09-15"):
+    return block(block_id, "paragraph", f"{date} 실행 기준")
+
+
+def cards(block_id, labels=CARD_LABELS):
+    """카드 단 블록과 그 자식들. children_of 대역이 쓸 수 있게 함께 만든다."""
+    columns = [{"id": f"{block_id}-c{i}", "type": "column", "column": {}} for i in range(len(labels))]
+    tree = {block_id: columns}
+    for column, label in zip(columns, labels):
+        tree[column["id"]] = [{"id": column["id"] + "-k", "type": "callout",
+                               "callout": {"rich_text": [{"plain_text": label + "\n3"}]}}]
+    return block(block_id, "column_list"), tree
+
+
+def children_of(tree):
+    return lambda block_id: tree.get(block_id, [])
 
 
 class FakeDashboard:
-    def __init__(self, rows=(), children=()):
+    def __init__(self, rows=(), children=(), tree=None):
         self.rows = list(rows)
         self.children = list(children)
+        self.tree = dict(tree or {})
         self.created, self.updated, self.archived = [], [], []
         self.deleted, self.appended = [], []
 
@@ -61,6 +81,9 @@ class FakeDashboard:
 
     def page_children(self):
         return self.children
+
+    def block_children(self, block_id):
+        return self.tree.get(block_id, [])
 
     def delete_block(self, block_id):
         self.deleted.append(block_id)
@@ -112,32 +135,49 @@ class TestSummary:
 
 
 class TestBlocksToReplace:
-    def test_only_blocks_between_summary_and_next_heading(self):
-        children = [block("intro"), heading("h1", SUMMARY_HEADING), block("old1"),
-                    block("old2", "column_list"), heading("h2", "지금 볼 공고"), block("view")]
-        assert blocks_to_replace(children) == ("h1", ("old1", "old2"))
+    def test_our_caption_and_cards_are_replaced(self):
+        cards_block, tree = cards("old2")
+        children = [block("intro"), heading("h1", SUMMARY_HEADING), caption("old1"), cards_block,
+                    heading("h2", "지금 볼 공고"), block("view")]
+        assert blocks_to_replace(children, children_of(tree)) == ("h1", ("old1", "old2"))
 
     def test_no_summary_heading(self):
-        assert blocks_to_replace([block("a"), heading("h", "다른 제목")]) == (None, ())
+        assert blocks_to_replace([block("a"), heading("h", "다른 제목")], children_of({})) == (None, ())
 
     def test_summary_at_the_end(self):
-        assert blocks_to_replace([heading("h1", SUMMARY_HEADING), block("x")]) == ("h1", ("x",))
+        assert blocks_to_replace([heading("h1", SUMMARY_HEADING), caption("x")], children_of({})) == ("h1", ("x",))
 
-    def test_child_pages_and_linked_views_end_the_region_too(self):
-        """제목이 아니어도 하위 페이지나 보기를 만나면 요약 영역이 끝난다.
-
-        사용자가 다음 제목을 지워도 그 뒤의 하위 페이지나 연결된 보기까지
-        요약으로 오인해 지우면 안 된다.
-        """
+    def test_child_pages_and_linked_views_survive(self):
+        """사용자가 다음 제목을 지워도 하위 페이지와 보기는 지우지 않는다."""
+        cards_block, tree = cards("old2")
         children = [
             heading("h1", SUMMARY_HEADING),
-            block("old"),
-            block("old2", "column_list"),
+            caption("old"),
+            cards_block,
             block("view", "child_database"),
             block("p", "child_page"),
-            block("after"),
+            block("plain"),
         ]
-        assert blocks_to_replace(children) == ("h1", ("old", "old2"))
+        assert blocks_to_replace(children, children_of(tree)) == ("h1", ("old", "old2"))
+
+    def test_a_column_of_views_under_the_heading_is_not_ours(self):
+        """사용자가 보기와 차트를 나란히 놓아 요약 영역 안에 들어간 경우.
+
+        자리로 판단하면 이 단 블록째 지워져 보기와 차트가 사라진다.
+        """
+        views = block("views", "column_list")
+        tree = {"views": [{"id": "views-c0", "type": "column", "column": {}}],
+                "views-c0": [block("v", "child_database")]}
+        cards_block, card_tree = cards("cards")
+        children = [heading("h1", SUMMARY_HEADING), caption("cap"), cards_block, views,
+                    heading("h2", "자세히 보기")]
+        assert blocks_to_replace(children, children_of({**tree, **card_tree})) == ("h1", ("cap", "cards"))
+
+    def test_a_users_own_paragraph_stays(self):
+        assert blocks_to_replace(
+            [heading("h1", SUMMARY_HEADING), block("memo", "paragraph", "메모"), caption("cap")],
+            children_of({}),
+        ) == ("h1", ("cap",))
 
 
 class TestSyncSkills:
@@ -176,7 +216,7 @@ class TestSyncSkills:
 class TestWriteSummary:
     def test_appends_new_blocks_before_deleting_old_ones(self):
         """새 블록을 먼저 넣는다. 지운 뒤 추가가 실패하면 요약이 통째로 사라진다."""
-        fake = FakeDashboard(children=[heading("h1", SUMMARY_HEADING), block("old"), heading("h2", "다음")])
+        fake = FakeDashboard(children=[heading("h1", SUMMARY_HEADING), caption("old"), heading("h2", "다음")])
         calls = []
         fake.append_after = lambda after, children: calls.append(("append", after))
         fake.delete_block = lambda block_id: calls.append(("delete", block_id))

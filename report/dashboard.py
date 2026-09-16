@@ -17,7 +17,7 @@ import sys
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator, Mapping, Protocol, Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, Protocol, Sequence
 
 from analyze.gap import AnalyzedPosting
 from analyze.priority import PRIORITIES, assign_priority
@@ -53,11 +53,13 @@ CATEGORY_LABELS: dict[str, str] = {
     "tooling": "협업 도구",
 }
 
-#: 요약 카드가 쓰는 블록 종류. summary_blocks 가 쓰는 것과 설정 명령이 만드는
-#: 자리 표시자가 이 두 종류뿐이다. 그 밖의 종류(어떤 제목이든, 하위 페이지,
-#: 연결된 보기 등)를 만나면 요약 영역이 끝난 것으로 본다. 사용자가 다음
-#: 제목을 지워도 하위 페이지와 연결된 보기는 절대 지우면 안 되기 때문이다.
-_SUMMARY_REGION_TYPES = frozenset({"paragraph", "column_list"})
+#: 요약 카드 이름. 매일 다시 쓸 블록을 찾아내는 표식이기도 하다.
+CARD_LABELS = ("오늘 분석한 공고", "우선순위 높음", "새로 들어온 공고")
+
+#: 기준일 한 줄의 끝. 카드와 함께 이 문단만 다시 쓴다.
+CAPTION_SUFFIX = "실행 기준"
+
+_HEADINGS = ("heading_1", "heading_2", "heading_3")
 
 
 def skill_properties(row: SkillRow) -> dict[str, Any]:
@@ -111,16 +113,14 @@ def summary_blocks(summary: Summary, run_date: str) -> list[dict[str, Any]]:
     카드 하나가 화면 절반을 차지하고 제목이 DB 이름으로만 나온다(2026-09-15 확인).
     이 숫자들은 매일 실행 때만 바뀌므로 실시간으로 셀 이유도 없다.
     """
-    cards = (
-        ("오늘 분석한 공고", summary.open_postings),
-        ("우선순위 높음", summary.high_priority),
-        ("새로 들어온 공고", summary.new_postings),
-    )
+    cards = zip(CARD_LABELS, (summary.open_postings, summary.high_priority, summary.new_postings))
     return [
         {
             "type": "paragraph",
             "paragraph": {
-                "rich_text": [{"text": {"content": f"{run_date} 실행 기준"}, "annotations": {"color": "gray"}}]
+                "rich_text": [
+                    {"text": {"content": f"{run_date} {CAPTION_SUFFIX}"}, "annotations": {"color": "gray"}}
+                ]
             },
         },
         {
@@ -139,8 +139,36 @@ def _plain(block: Mapping[str, Any]) -> str:
     return "".join(t.get("plain_text") or (t.get("text") or {}).get("content", "") for t in rich).strip()
 
 
-def blocks_to_replace(children: Sequence[Mapping[str, Any]]) -> tuple[str | None, tuple[str, ...]]:
-    """'요약' 제목 블록 id 와, 그 뒤부터 다음 제목 전까지의 블록 id 들."""
+def _is_caption(block: Mapping[str, Any]) -> bool:
+    return block.get("type") == "paragraph" and _plain(block).endswith(CAPTION_SUFFIX)
+
+
+def _is_cards(block: Mapping[str, Any], children_of: Callable[[str], Sequence[Mapping[str, Any]]]) -> bool:
+    """카드 3개가 들어 있는 단 블록인지. 안을 열어 보고 판단한다."""
+    if block.get("type") != "column_list":
+        return False
+    columns = children_of(block["id"])
+    if len(columns) != len(CARD_LABELS):
+        return False
+    for column in columns:
+        inner = children_of(column["id"])
+        if len(inner) != 1 or inner[0].get("type") != "callout":
+            return False
+        if _plain(inner[0]).split("\n")[0].strip() not in CARD_LABELS:
+            return False
+    return True
+
+
+def blocks_to_replace(
+    children: Sequence[Mapping[str, Any]],
+    children_of: Callable[[str], Sequence[Mapping[str, Any]]],
+) -> tuple[str | None, tuple[str, ...]]:
+    """'요약' 제목 블록 id 와, 그 뒤에서 **우리가 쓴** 기준일 문단과 카드 블록의 id 들.
+
+    자리로 판단하지 않고 내용으로 판단한다. 사용자가 요약 제목 아래에 보기나
+    차트를 옮겨 둘 수 있는데(실제로 그렇게 배치했다), 자리로 판단하면 그것까지
+    지운다. 우리 것이 아닌 블록은 건너뛰고, 다음 제목에서 멈춘다.
+    """
     heading_id: str | None = None
     stale: list[str] = []
     for block in children:
@@ -149,9 +177,10 @@ def blocks_to_replace(children: Sequence[Mapping[str, Any]]) -> tuple[str | None
             if kind == "heading_2" and _plain(block) == SUMMARY_HEADING:
                 heading_id = block["id"]
             continue
-        if kind not in _SUMMARY_REGION_TYPES:
+        if kind in _HEADINGS:
             break
-        stale.append(block["id"])
+        if _is_caption(block) or _is_cards(block, children_of):
+            stale.append(block["id"])
     return heading_id, tuple(stale)
 
 
@@ -161,6 +190,7 @@ class DashboardClient(Protocol):
     def update_skill(self, page_id: str, properties: Mapping[str, Any]) -> None: ...
     def archive(self, page_id: str) -> None: ...
     def page_children(self) -> list[Mapping[str, Any]]: ...
+    def block_children(self, block_id: str) -> list[Mapping[str, Any]]: ...
     def delete_block(self, block_id: str) -> None: ...
     def append_after(self, after_id: str, children: Sequence[Mapping[str, Any]]) -> None: ...
 
@@ -216,6 +246,10 @@ class HttpDashboardClient:
             if not payload.get("has_more"):
                 return children
             cursor = payload.get("next_cursor")
+
+    def block_children(self, block_id: str) -> list[Mapping[str, Any]]:
+        """블록 하나의 자식. 단 블록 안이 우리 카드인지 확인할 때만 부른다."""
+        return list(self._call("GET", f"/blocks/{block_id}/children?page_size=100").get("results") or ())
 
     def delete_block(self, block_id: str) -> None:
         self._call("DELETE", f"/blocks/{block_id}")
@@ -287,7 +321,7 @@ class DashboardSync:
         return SkillSyncResult(created=created, updated=updated, archived=archived, failed=failed)
 
     def write_summary(self, summary: Summary, run_date: str) -> bool:
-        heading_id, stale = blocks_to_replace(self.client.page_children())
+        heading_id, stale = blocks_to_replace(self.client.page_children(), self.client.block_children)
         if heading_id is None:
             print(
                 f"  ! 대시보드에 '{SUMMARY_HEADING}' 제목(제목 2)이 없어 요약을 쓰지 않았습니다",
