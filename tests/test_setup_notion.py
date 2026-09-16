@@ -139,3 +139,44 @@ class TestMain:
         monkeypatch.setenv("NOTION_TOKEN", "wrong")
         assert setup_notion.main([PAGE_ID], opener=_Opener(error=_http_error(401))) == 1
         assert "토큰" in capsys.readouterr().err
+
+
+class TestDashboardFlag:
+    def test_needs_the_jobs_database(self, monkeypatch, capsys):
+        monkeypatch.setenv("NOTION_TOKEN", "tok")
+        monkeypatch.delenv("NOTION_DATABASE_ID", raising=False)
+        assert setup_notion.main([PAGE_ID, "--dashboard"]) == 1
+        assert "NOTION_DATABASE_ID" in capsys.readouterr().err
+
+    def test_prints_the_two_env_vars(self, monkeypatch, capsys):
+        from report.dashboard_layout import DashboardIds
+
+        monkeypatch.setenv("NOTION_TOKEN", "tok")
+        monkeypatch.setenv("NOTION_DATABASE_ID", "jobs")
+        seen = {}
+
+        def fake_build(request, *, page_id, jobs_database_id):
+            seen.update(page_id=page_id, jobs=jobs_database_id)
+            return DashboardIds(page_id=page_id, skill_database_id="skill-db")
+
+        monkeypatch.setattr(setup_notion, "build_dashboard", fake_build)
+        assert setup_notion.main([PAGE_ID, "--dashboard"]) == 0
+        out = capsys.readouterr().out
+        assert seen == {"page_id": PAGE_ID, "jobs": "jobs"}
+        assert "NOTION_DASHBOARD_PAGE_ID" in out and PAGE_ID in out
+        assert "NOTION_SKILL_DATABASE_ID" in out and "skill-db" in out
+
+    def test_network_drop_also_shows_the_partial_build_hint(self, monkeypatch, capsys):
+        """중간에 연결이 끊겨도 페이지에는 이미 일부 블록이 생겨 있을 수 있다.
+        HTTPError/값 오류와 같은 안내를 받아야 한다."""
+        monkeypatch.setenv("NOTION_TOKEN", "tok")
+        monkeypatch.setenv("NOTION_DATABASE_ID", "jobs")
+
+        def fake_build(request, *, page_id, jobs_database_id):
+            raise OSError("boom")
+
+        monkeypatch.setattr(setup_notion, "build_dashboard", fake_build)
+        assert setup_notion.main([PAGE_ID, "--dashboard"]) == 1
+        err = capsys.readouterr().err
+        assert "boom" in err
+        assert setup_notion._PARTIAL_BUILD_HINT in err

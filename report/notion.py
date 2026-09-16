@@ -21,7 +21,7 @@ import os
 import sys
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator, Mapping, Protocol
+from typing import Any, Callable, Iterable, Iterator, Mapping, Protocol
 
 from analyze.gap import AnalyzedPosting
 from analyze.priority import assign_priority
@@ -156,6 +156,37 @@ def build_properties(
     return properties
 
 
+def notion_request(
+    token: str,
+    method: str,
+    path: str,
+    body: Mapping[str, Any] | None = None,
+    *,
+    version: str = NOTION_VERSION,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+) -> dict[str, Any]:
+    """Notion REST 호출 하나.
+
+    본문이 없으면(GET, DELETE) data 를 싣지 않는다. 버전은 기본이 매일 적재용이고,
+    Views API 가 필요한 설정 명령만 올려서 부른다. 매일 적재까지 올리면 DB 조회
+    방식이 바뀌어 적재 코드 전체를 옮겨야 한다.
+    """
+    request = urllib.request.Request(
+        f"{API_ROOT}{path}",
+        method=method,
+        data=None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Notion-Version": version,
+            "Content-Type": "application/json; charset=utf-8",
+        },
+    )
+    raw = opener(request, timeout=TIMEOUT_SEC).read()
+    if not raw:
+        return {}
+    return json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+
+
 class HttpNotionClient:
     """Notion REST 클라이언트. 테스트는 이 자리에 대역을 넣는다."""
 
@@ -165,18 +196,7 @@ class HttpNotionClient:
         self._opener = opener
 
     def _request(self, method: str, path: str, body: Mapping[str, Any]) -> Mapping[str, Any]:
-        request = urllib.request.Request(
-            f"{API_ROOT}{path}",
-            method=method,
-            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._token}",
-                "Notion-Version": NOTION_VERSION,
-                "Content-Type": "application/json; charset=utf-8",
-            },
-        )
-        raw = self._opener(request, timeout=TIMEOUT_SEC).read()
-        return json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+        return notion_request(self._token, method, path, body, opener=self._opener)
 
     def find_page_id(self, key: str) -> str | None:
         payload = self._request(

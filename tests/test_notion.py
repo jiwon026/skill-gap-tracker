@@ -7,12 +7,21 @@
     바꿔 둔 것을 매일 '신규'로 되돌리면 이 도구는 못 쓴다.
   - 자격증명이 없으면 조용히 건너뛴다. 파이프라인 전체가 멈추면 안 된다.
 """
+import json
+
 import pytest
 
 from analyze.gap import AnalyzedPosting, Gap
 from collect.schema import Posting
 from extract.companies import Company, CompanyBook
-from report.notion import LISTING_STATUSES, NotionSync, build_properties, listing_status
+from report.notion import (
+    LISTING_STATUSES,
+    NOTION_VERSION,
+    NotionSync,
+    build_properties,
+    listing_status,
+    notion_request,
+)
 
 SKILL_NAMES = {"sql": "SQL", "airflow": "Apache Airflow", "dbt": "dbt"}
 
@@ -484,3 +493,47 @@ class TestScale:
     def test_unknown_company_is_etc(self):
         row = make_analyzed(company=None)
         assert build_properties(row, SKILL_NAMES)["규모"]["select"]["name"] == "기타"
+
+
+class _Response:
+    def __init__(self, payload):
+        self._raw = json.dumps(payload).encode("utf-8") if payload is not None else b""
+
+    def read(self):
+        return self._raw
+
+
+def recording_opener(payload):
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(request)
+        return _Response(payload)
+
+    return opener, calls
+
+
+class TestNotionRequest:
+    def test_get_sends_no_body_and_uses_the_given_version(self):
+        """GET 에 본문을 실으면 Notion 이 400 을 준다. 버전은 설정 명령만 올린다."""
+        opener, calls = recording_opener({"ok": True})
+        result = notion_request("tok", "GET", "/views/abc", version="2026-03-11", opener=opener)
+
+        assert result == {"ok": True}
+        request = calls[0]
+        assert request.get_method() == "GET"
+        assert request.data is None
+        assert request.full_url == "https://api.notion.com/v1/views/abc"
+        assert request.get_header("Notion-version") == "2026-03-11"
+
+    def test_default_version_stays_on_the_daily_one(self):
+        opener, calls = recording_opener({})
+        notion_request("tok", "POST", "/pages", {"a": "한글"}, opener=opener)
+
+        assert calls[0].get_header("Notion-version") == NOTION_VERSION
+        assert json.loads(calls[0].data.decode("utf-8")) == {"a": "한글"}
+
+    def test_empty_response_body_is_an_empty_dict(self):
+        """DELETE 가 본문 없이 끝나도 호출부가 json 오류로 죽지 않아야 한다."""
+        opener, _ = recording_opener(None)
+        assert notion_request("tok", "DELETE", "/blocks/x", opener=opener) == {}

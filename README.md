@@ -117,6 +117,26 @@ Windows 작업 스케줄러에 매일 실행을 등록하려면:
 powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 07:30
 ```
 
+### 대시보드 (선택)
+
+공고 DB 는 열이 14개라 한눈에 보기 어렵습니다. 대시보드를 만들면 첫 화면에서
+요약 숫자, 모집중 공고(열 5개), 부족 스킬 차트를 보고, 자세한 내용은 하위
+페이지(나의 스킬, 역량 갭, 공고 전체)에서 봅니다.
+
+1. Notion 에 빈 페이지를 만들고 인테그레이션을 연결합니다.
+2. 공고 DB 의 `NOTION_DATABASE_ID` 가 들어 있는 상태에서 실행합니다.
+
+   ```bash
+   .venv/Scripts/python setup_notion.py "<대시보드 페이지 URL>" --dashboard
+   ```
+
+3. 출력된 `NOTION_DASHBOARD_PAGE_ID`, `NOTION_SKILL_DATABASE_ID` 를 환경변수로 넣습니다.
+
+- Notion 무료 요금제는 차트 보기 개수가 제한될 수 있습니다. 이 대시보드는 부족 스킬 차트 1개를 씁니다.
+- 요약 숫자는 매일 실행 때 '요약' 제목 바로 뒤의 텍스트와 카드 블록만 다시 씁니다. 첫 제목이나 그 밖의 블록(보기, 하위 페이지 등)을 만나면 거기서 멈추므로, 그 자리에 직접 적은 내용은 교체됩니다.
+- 스킬 DB 는 `config/profile.yaml`, `config/experience.yaml` 기준으로 매일 덮어씁니다. 스킬은 설정 파일에서 고치세요.
+- `--dashboard` 를 다시 실행하면 구조를 한 번 더 만듭니다. 페이지 하나당 한 번만 실행하세요. 다시 만들고 싶으면 그 페이지의 블록을 먼저 지우고 실행하세요.
+
 ## 테스트
 
 ```bash

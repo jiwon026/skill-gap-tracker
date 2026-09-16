@@ -19,12 +19,13 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Iterable, Mapping
+from typing import Callable, Iterable, Mapping, Sequence
 
 import yaml
 
 from analyze.gap import AnalyzedPosting, compute_gap
 from analyze.priority import assign_priority, priority_rank
+from analyze.skill_board import build_skill_rows
 from collect import greenhouse, saramin, woowahan
 
 #: 저장소에 넣지 않는 개인용 수집기를 두는 패키지(.gitignore). 모듈마다
@@ -68,6 +69,7 @@ from extract.region import RegionRule, in_region
 from extract.relevance import RelevanceDict, classify
 from extract.seniority import SeniorityRule, is_entry_level, years_from_requirements
 from extract.skills import SkillDict, extract_skills
+from report.dashboard import DashboardSync, summarize
 from report.notion import NotionSync
 
 ROOT = Path(__file__).parent
@@ -237,18 +239,25 @@ def _report_source(label: str, result) -> None:
     print(f"  {label:18s} {len(result.postings):4d}건{note}")
 
 
+def _skill_sources() -> tuple[list[dict], frozenset[str], ExperienceBook]:
+    """스킬 사전, 보유 도구, 경험. 공고 분석과 스킬 DB 가 같은 보유 판정을 쓰게 한 곳에서 읽는다."""
+    skill_entries = _config("skills.yaml")["skills"]
+    experience_book = ExperienceBook.from_config(_config("experience.yaml"))
+    experience_book.validate_against({s["id"] for s in skill_entries})
+    tool_ids = frozenset(s["id"] for s in _config("profile.yaml")["skills"])
+    return skill_entries, tool_ids, experience_book
+
+
 def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
     """직군으로 좁히고, 회사를 묶고, 스킬 갭을 계산한다."""
     relevance = RelevanceDict.from_config(_config("relevance.yaml"))
     book = CompanyBook.from_config(_config("companies.yaml"))
-    skill_entries = _config("skills.yaml")["skills"]
+    skill_entries, tool_ids, experience_book = _skill_sources()
     dictionary = SkillDict.from_entries(skill_entries)
 
     # 보유 스킬 = profile.yaml 의 도구 + 프로젝트가 증명하는 것.
     # 후자를 빠뜨리면 실제로 해 본 분석까지 '부족'으로 잡혀 갭이 나쁘게 나온다.
-    experience_book = ExperienceBook.from_config(_config("experience.yaml"))
-    experience_book.validate_against({s["id"] for s in skill_entries})
-    owned = {s["id"] for s in _config("profile.yaml")["skills"]} | experience_book.proven_skills()
+    owned = set(tool_ids) | experience_book.proven_skills()
 
     # 상용구 판정은 직군 필터 '이전' 전체 공고로 한다. 필터를 먼저 걸면 회사당
     # 표본이 2~6건으로 떨어지고, 그 표본에서는 실제 자격요건까지 반복으로
@@ -388,6 +397,7 @@ def publish(
     *,
     collected: Iterable[str],
     complete_sources: frozenset[str],
+    run_date: str,
 ) -> None:
     rows = tuple(analyzed)
     names = {s["id"]: s.get("name", s["id"]) for s in _config("skills.yaml")["skills"]}
@@ -429,6 +439,41 @@ def publish(
     if complete_sources:
         print(f"         (마감 판정한 소스: {', '.join(sorted(complete_sources))})")
 
+    publish_dashboard(rows, created=result.created, run_date=run_date)
+
+
+def publish_dashboard(rows: Sequence[AnalyzedPosting], *, created: int, run_date: str) -> None:
+    """스킬 DB 와 요약 카드를 갱신한다. 공고 적재 뒤에 부른다.
+
+    여기서 실패해도 공고 DB 는 이미 최신이다. 경고만 남기고 끝낸다.
+    """
+    dashboard = DashboardSync.from_env()
+    if dashboard is None:
+        print(
+            "[대시보드] NOTION_DASHBOARD_PAGE_ID / NOTION_SKILL_DATABASE_ID 가 없어 건너뜁니다",
+            file=sys.stderr,
+        )
+        return
+
+    try:
+        skill_entries, tool_ids, experience_book = _skill_sources()
+        skills = build_skill_rows(
+            rows, skill_entries=skill_entries, tool_ids=tool_ids, experiences=experience_book
+        )
+        result = dashboard.sync_skills(skills)
+        written = dashboard.write_summary(summarize(rows, created=created), run_date)
+    except Exception as exc:
+        # 대시보드는 덤이다. 어떤 예외가 나든 경고만 남기고 파이프라인의
+        # 종료 코드는 절대 건드리지 않는다.
+        print(f"  ! 대시보드 갱신 실패: {exc}", file=sys.stderr)
+        return
+
+    note = "" if written else ", 요약 못 씀"
+    print(
+        f"[대시보드] 스킬 신규 {result.created}, 갱신 {result.updated},"
+        f" 보관 {result.archived}, 실패 {result.failed}{note}"
+    )
+
 
 def _force_utf8_output() -> None:
     """Windows 콘솔 기본 코덱(cp949)이 한글·기호에서 터지는 것을 막는다."""
@@ -463,6 +508,7 @@ def main() -> int:
         attach_company_sizes(analyze(postings), today=datetime.now(KST).date()),
         collected={posting.key for posting in postings},
         complete_sources=complete_sources,
+        run_date=run_date,
     )
     return 0
 

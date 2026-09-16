@@ -367,3 +367,101 @@ class TestLocalSources:
         outcomes = [("board", True, 5)]
         assert run._complete_sources(outcomes) == frozenset()
         assert run._complete_sources(outcomes, frozenset({"board"})) == frozenset({"board"})
+
+
+class TestPublishDashboard:
+    """대시보드는 공고 적재가 끝난 뒤의 덤이다. 실패해도 파이프라인을 멈추지 않는다."""
+
+    def test_skipped_without_env(self, monkeypatch, capsys):
+        monkeypatch.setattr(run.DashboardSync, "from_env", classmethod(lambda cls: None))
+        run.publish_dashboard((), created=0, run_date="2026-09-15")
+        assert "건너뜁니다" in capsys.readouterr().err
+
+    def test_failure_is_reported_not_raised(self, monkeypatch, capsys):
+        class Broken:
+            def sync_skills(self, rows):
+                raise OSError("network down")
+
+        monkeypatch.setattr(run.DashboardSync, "from_env", classmethod(lambda cls: Broken()))
+        run.publish_dashboard((), created=0, run_date="2026-09-15")
+        assert "network down" in capsys.readouterr().err
+
+    def test_skill_rows_use_the_same_owned_rule_as_analyze(self, monkeypatch):
+        captured = {}
+
+        class Recorder:
+            def sync_skills(self, rows):
+                captured["rows"] = rows
+                from report.dashboard import SkillSyncResult
+
+                return SkillSyncResult(created=0, updated=0, archived=0, failed=0)
+
+            def write_summary(self, summary, run_date):
+                captured["summary"] = summary
+                return True
+
+        monkeypatch.setattr(run.DashboardSync, "from_env", classmethod(lambda cls: Recorder()))
+        run.publish_dashboard((), created=2, run_date="2026-09-15")
+
+        entries, tools, book = run._skill_sources()
+        expected_owned = set(tools) | book.proven_skills()
+        assert {r.skill_id for r in captured["rows"] if r.owned} == expected_owned
+        assert captured["summary"].new_postings == 2
+
+    def test_row_building_failure_is_reported_not_raised(self, monkeypatch, capsys):
+        from report.dashboard import SkillSyncResult
+
+        class Working:
+            def sync_skills(self, rows):
+                return SkillSyncResult(created=0, updated=0, archived=0, failed=0)
+
+            def write_summary(self, summary, run_date):
+                return True
+
+        monkeypatch.setattr(run.DashboardSync, "from_env", classmethod(lambda cls: Working()))
+        monkeypatch.setattr(
+            run,
+            "build_skill_rows",
+            lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad row")),
+        )
+        run.publish_dashboard((), created=0, run_date="2026-09-15")
+        assert "bad row" in capsys.readouterr().err
+
+    def test_any_exception_from_sync_is_reported_not_raised(self, monkeypatch, capsys):
+        """가드가 넓다: OSError, ValueError, KeyError 가 아닌 예외도 경고만 남긴다."""
+        class Broken:
+            def sync_skills(self, rows):
+                raise TypeError("shape")
+
+        monkeypatch.setattr(run.DashboardSync, "from_env", classmethod(lambda cls: Broken()))
+        run.publish_dashboard((), created=0, run_date="2026-09-15")
+        assert "shape" in capsys.readouterr().err
+
+
+class TestPublish:
+    """publish 가 결과를 대시보드에 그대로 전달하는지."""
+
+    def test_created_count_and_run_date_reach_the_dashboard(self, monkeypatch):
+        from report.notion import RetireResult, SyncResult
+
+        class FakeSync:
+            def push(self, rows, names):
+                return SyncResult(created=3, updated=0, failed=0)
+
+            def retire(self, *, active, collected, complete_sources):
+                return RetireResult(excluded=0, closed=0, unchanged=0, skipped=0, failed=0)
+
+        monkeypatch.setattr(run.NotionSync, "from_env", classmethod(lambda cls: FakeSync()))
+
+        recorded = {}
+
+        def fake_publish_dashboard(rows, *, created, run_date):
+            recorded["created"] = created
+            recorded["run_date"] = run_date
+
+        monkeypatch.setattr(run, "publish_dashboard", fake_publish_dashboard)
+
+        run.publish((), collected=set(), complete_sources=frozenset(), run_date="2026-09-15")
+
+        assert recorded["created"] == 3
+        assert recorded["run_date"] == "2026-09-15"
