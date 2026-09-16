@@ -108,6 +108,9 @@ def skill_chart_payload(data_source_id: str, property_ids: Mapping[str, str], *,
             "x_axis": {"type": "multi_select", "property_id": property_ids["부족 스킬"], "sort": {"type": "manual"}},
             "y_axis": {"aggregator": "count"},
             "sort": "y_descending",
+            # 선택지는 한 번 쓰이면 DB 에 남는다. 이게 없으면 지금 아무 공고도
+            # 요구하지 않는 스킬이 0짜리 막대로 계속 쌓인다(31개 중 5개만 값이 있었다).
+            "hide_empty_groups": True,
         },
     }
 

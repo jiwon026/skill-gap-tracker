@@ -55,6 +55,8 @@ def test_skill_chart_counts_missing_skills_of_open_postings_only():
     assert conf["x_axis"] == {"type": "multi_select", "property_id": JOB_PROPS["부족 스킬"], "sort": {"type": "manual"}}
     # '부족 스킬 없음' 막대가 끼지 않게 한다(2026-09-15 확인).
     assert {"property": "부족 스킬", "multi_select": {"is_not_empty": True}} in body["filter"]["and"]
+    # 지금 아무 공고도 요구하지 않는 선택지가 0짜리 막대로 남지 않게 한다(2026-09-16 확인).
+    assert conf["hide_empty_groups"] is True
 
 
 def test_skill_database_has_the_synced_columns():
