@@ -30,6 +30,7 @@ CHART_HEADING = "채우면 좋은 스킬"
 DETAIL_HEADING = "자세히 보기"
 OWNED_PAGE = "나의 스킬"
 GAP_PAGE = "역량 갭"
+JOBS_LINK_TEXT = "공고 전체 보기"
 
 #: (method, path, body) 를 받아 응답 JSON 을 주는 호출. 테스트는 대역을 넣는다.
 Request = Callable[..., Mapping[str, Any]]
@@ -59,6 +60,21 @@ def _linked(page_id: str, after_block: str | None = None) -> dict[str, Any]:
     if after_block:
         target["position"] = {"type": "after_block", "block_id": after_block}
     return target
+
+
+def jobs_link_block(url: str) -> dict[str, Any]:
+    """공고 DB 로 가는 링크 문단.
+
+    link_to_page 블록을 쓰지 않는 이유: 공고 DB 가 페이지 안에 들어 있는
+    인라인 DB 면 Notion 이 400 을 준다(database_id must reference a
+    collection_view_page). DB 주소로 거는 링크는 어느 쪽이든 된다.
+    """
+    return {
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": [{"type": "text", "text": {"content": JOBS_LINK_TEXT, "link": {"url": url}}}]
+        },
+    }
 
 
 def jobs_view_payload(data_source_id: str, property_ids: Mapping[str, str], *, page_id: str, after_block: str) -> dict[str, Any]:
@@ -167,7 +183,8 @@ class DashboardIds:
 
 def build_dashboard(request: Request, *, page_id: str, jobs_database_id: str) -> DashboardIds:
     """빈 페이지에 대시보드를 만든다. 공고 DB 는 옮기지 않고 보기와 링크만 둔다."""
-    jobs_ds = request("GET", f"/databases/{jobs_database_id}", None)["data_sources"][0]["id"]
+    jobs_db = request("GET", f"/databases/{jobs_database_id}", None)
+    jobs_ds = jobs_db["data_sources"][0]["id"]
     jobs_props = _property_ids(request("GET", f"/data_sources/{jobs_ds}", None))
 
     top = _append(request, page_id, [
@@ -185,7 +202,7 @@ def build_dashboard(request: Request, *, page_id: str, jobs_database_id: str) ->
     owned_page = _child_page(request, page_id, OWNED_PAGE)
     gap_page = _child_page(request, page_id, GAP_PAGE)
     _append(request, page_id, [
-        {"type": "link_to_page", "link_to_page": {"type": "database_id", "database_id": jobs_database_id}},
+        jobs_link_block(jobs_db["url"]),
     ])
 
     skill_db = request("POST", "/databases", skill_database_payload(owned_page))

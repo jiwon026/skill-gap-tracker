@@ -85,7 +85,7 @@ class ScriptedNotion:
     def __call__(self, method, path, body):
         self.calls.append((method, path, body))
         if method == "GET" and path == "/databases/jobs":
-            return {"data_sources": [{"id": "jobs-ds"}]}
+            return {"data_sources": [{"id": "jobs-ds"}], "url": "https://notion.so/jobs-db"}
         if method == "GET" and path == "/data_sources/jobs-ds":
             return {"properties": {n: {"id": i} for n, i in JOB_PROPS.items()}}
         if method == "PATCH" and path.endswith("/children"):
@@ -122,3 +122,17 @@ def test_build_dashboard_creates_everything_in_order():
     assert pages == ["나의 스킬", "역량 갭"]
     database = next(body for m, p, body in notion.calls if m == "POST" and p == "/databases")
     assert database["parent"] == {"type": "page_id", "page_id": "page-나의 스킬"}
+
+
+def test_jobs_link_is_a_url_paragraph_not_a_link_to_page():
+    """공고 DB 가 페이지 안에 들어 있는 인라인 DB 면 link_to_page 가 400 이 된다
+    (실제 DB 에서 확인: database_id must reference a collection_view_page)."""
+    notion = ScriptedNotion()
+    build_dashboard(notion, page_id="dash", jobs_database_id="jobs")
+
+    appended = [b for m, p, body in notion.calls if p == "/blocks/dash/children" for b in body["children"]]
+    assert not any(b["type"] == "link_to_page" for b in appended)
+    link = [b for b in appended if b["type"] == "paragraph" and b["paragraph"]["rich_text"]
+            and (b["paragraph"]["rich_text"][0]["text"].get("link") or {}).get("url")]
+    assert len(link) == 1
+    assert link[0]["paragraph"]["rich_text"][0]["text"]["link"]["url"] == "https://notion.so/jobs-db"
