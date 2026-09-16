@@ -16,6 +16,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
+from analyze.recommend import DIRECT, FOUNDATION
+from report.course_notion import (
+    COURSE_DB_PROPERTIES,
+    COURSE_STATUSES,
+    LISTINGS,
+    OPEN_RECOMMENDATION,
+)
 from report.dashboard import MISSING, OWNED, SKILL_DB_PROPERTIES, SUMMARY_HEADING
 from report.notion import OPEN
 
@@ -31,6 +38,9 @@ DETAIL_HEADING = "자세히 보기"
 OWNED_PAGE = "나의 스킬"
 GAP_PAGE = "역량 갭"
 JOBS_LINK_TEXT = "공고 전체 보기"
+
+COURSE_PAGE = "추천 강의"
+COURSE_COLUMNS = ("과정명", "스킬", "연결", "수업 방식", "기간", "본인부담액", "상태")
 
 #: (method, path, body) 를 받아 응답 JSON 을 주는 호출. 테스트는 대역을 넣는다.
 Request = Callable[..., Mapping[str, Any]]
@@ -178,10 +188,72 @@ def _child_page(request: Request, parent_page_id: str, title: str) -> str:
     return payload["id"]
 
 
+def course_database_payload(parent_page_id: str, skill_data_source_id: str) -> dict[str, Any]:
+    """강의 DB. 스킬 DB 와 관계로 잇는다.
+
+    관계는 새 API 버전에서 data_source_id 로 건다. 스킬 행이 사라지면 연결이
+    끊기므로, 매일 갱신은 스킬 행을 보관하지 않고 요구 공고 수만 0 으로 둔다.
+    """
+    properties: dict[str, Any] = {}
+    for name, kind in COURSE_DB_PROPERTIES.items():
+        if name == "스킬":
+            properties[name] = {"relation": {"data_source_id": skill_data_source_id, "type": "single_property",
+                                             "single_property": {}}}
+        elif name == "추천 현황":
+            properties[name] = {"select": {"options": [{"name": LISTINGS[0], "color": "green"},
+                                                       {"name": LISTINGS[1], "color": "gray"}]}}
+        elif name == "상태":
+            colors = ("blue", "orange", "yellow", "green", "gray")
+            properties[name] = {"select": {"options": [{"name": n, "color": c}
+                                                       for n, c in zip(COURSE_STATUSES, colors)]}}
+        elif name == "연결":
+            properties[name] = {"select": {"options": [{"name": DIRECT, "color": "green"},
+                                                       {"name": FOUNDATION, "color": "gray"}]}}
+        elif kind == "select":
+            properties[name] = {"select": {"options": []}}
+        elif kind == "number":
+            properties[name] = {"number": {"format": "number"}}
+        else:
+            properties[name] = {kind: {}}
+    return {
+        "parent": {"type": "page_id", "page_id": parent_page_id},
+        "title": [{"type": "text", "text": {"content": "강의"}}],
+        "initial_data_source": {"properties": properties},
+    }
+
+
+def course_view_patch(property_ids: Mapping[str, str]) -> dict[str, Any]:
+    return {
+        "name": "추천 중",
+        "filter": {"property": "추천 현황", "select": {"equals": OPEN_RECOMMENDATION}},
+        "sorts": [{"property": "연결", "direction": "ascending"},
+                  {"property": "기간", "direction": "ascending"}],
+        "configuration": {"type": "table", "properties": visible_columns(property_ids, COURSE_COLUMNS)},
+    }
+
+
+def build_courses(request: Request, *, page_id: str, skill_database_id: str) -> str:
+    """이미 있는 대시보드에 추천 강의 페이지와 강의 DB 를 더한다.
+
+    이미 만들어진 대시보드에도 붙일 수 있어야 해서 build_dashboard 와 나눠 둔다.
+    """
+    skill_db = request("GET", f"/databases/{skill_database_id}", None)
+    skill_ds = skill_db["data_sources"][0]["id"]
+
+    course_page = _child_page(request, page_id, COURSE_PAGE)
+    course_db = request("POST", "/databases", course_database_payload(course_page, skill_ds))
+    course_ds = course_db["data_sources"][0]["id"]
+    course_props = _property_ids(request("GET", f"/data_sources/{course_ds}", None))
+    default_view = request("GET", f"/views?database_id={course_db['id']}", None)["results"][0]["id"]
+    request("PATCH", f"/views/{default_view}", course_view_patch(course_props))
+    return course_db["id"]
+
+
 @dataclass(frozen=True, slots=True)
 class DashboardIds:
     page_id: str
     skill_database_id: str
+    course_database_id: str = ""
 
 
 def build_dashboard(request: Request, *, page_id: str, jobs_database_id: str) -> DashboardIds:
@@ -215,4 +287,5 @@ def build_dashboard(request: Request, *, page_id: str, jobs_database_id: str) ->
     request("PATCH", f"/views/{default_view}", owned_view_patch(skill_props))
     request("POST", "/views", gap_view_payload(skill_ds, skill_props, page_id=gap_page))
 
-    return DashboardIds(page_id=page_id, skill_database_id=skill_db["id"])
+    course_db = build_courses(request, page_id=page_id, skill_database_id=skill_db["id"])
+    return DashboardIds(page_id=page_id, skill_database_id=skill_db["id"], course_database_id=course_db)

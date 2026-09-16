@@ -38,6 +38,8 @@ skills:
     name: BigQuery
     category: warehouse
     aliases: [BigQuery, "Big Query", 빅쿼리]
+    training:
+      foundation: [SQL, 데이터 분석]
   - id: snowflake
     name: Snowflake
     category: warehouse
@@ -54,6 +56,8 @@ skills:
     name: Apache Spark
     category: engine
     aliases: [Spark, PySpark, 스파크]
+    training:
+      foundation: [데이터 엔지니어, 빅데이터]
   - id: hadoop
     name: Hadoop
     category: engine
@@ -84,6 +88,8 @@ skills:
     name: Apache Airflow
     category: pipeline
     aliases: [Airflow, "Apache Airflow", 에어플로우, 에어플로]
+    training:
+      foundation: [데이터 엔지니어]
   - id: dbt
     name: dbt
     category: pipeline
@@ -106,6 +112,9 @@ skills:
     name: Tableau
     category: bi
     aliases: [Tableau, 태블로]
+    training:
+      direct: [Tableau, 태블로]
+      foundation: [데이터 시각화]
   - id: looker
     name: Looker
     category: bi
@@ -114,6 +123,9 @@ skills:
     name: Power BI
     category: bi
     aliases: ["Power BI", PowerBI, 파워비아이]
+    training:
+      direct: [Power BI, 파워BI]
+      foundation: [데이터 시각화]
   - id: superset
     name: Apache Superset
     category: bi
@@ -122,6 +134,8 @@ skills:
     name: Redash
     category: bi
     aliases: [Redash, 리대시]
+    training:
+      foundation: [데이터 시각화, SQL]
   - id: quicksight
     name: QuickSight
     category: bi
@@ -144,6 +158,9 @@ skills:
     name: GA4 / Google Analytics
     category: product_analytics
     aliases: [GA4, "Google Analytics", "구글 애널리틱스", 구글애널리틱스, "Universal Analytics"]
+    training:
+      direct: [GA4, 구글 애널리틱스]
+      foundation: [디지털 마케팅]
   - id: firebase
     name: Firebase
     category: product_analytics
@@ -162,6 +179,8 @@ skills:
     name: A/B 테스트
     category: method
     aliases: ["A/B", AB테스트, "A/B 테스트", 에이비테스트, "split test", 대조군, 실험설계, "실험 설계"]
+    training:
+      foundation: [데이터 분석, 빅데이터]
   - id: statistics
     name: 통계 검정
     category: method

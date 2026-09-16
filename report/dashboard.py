@@ -4,8 +4,9 @@
 만든다. 여기서는 그 안의 내용만 바꾼다.
 
   - 스킬 DB 는 보여 주기 전용이다. 기준은 profile.yaml 과 experience.yaml 이고,
-    Notion 에서 고친 값은 다음 실행에 덮어쓴다. 사용자가 적는 열이 없어서
-    해당하지 않게 된 행은 보관해도 잃는 것이 없다.
+    Notion 에서 고친 값은 다음 실행에 덮어쓴다. 오늘 해당하지 않게 된 행은
+    지우지 않고 요구 공고 수만 0 으로 둔다. 강의 DB 가 이 행과 관계를 맺어서,
+    행을 지우면 그 연결도 함께 끊기기 때문이다.
   - 요약 카드는 '요약' 제목 바로 뒤부터 다음 제목 전까지만 바꾼다. 그 밖의
     블록은 사용자의 것이다.
   - 구버전 API 를 쓴다. 공고 적재와 같은 버전이라 같은 방식으로 실패한다.
@@ -262,8 +263,11 @@ class HttpDashboardClient:
 class SkillSyncResult:
     created: int
     updated: int
-    archived: int
+    #: 오늘 아무 공고도 요구하지 않아 요구 공고 수를 0 으로 되돌린 행 수.
+    cleared: int
     failed: int
+    #: 스킬 id -> Notion 페이지 id. 강의 DB 가 관계를 걸 때 쓴다.
+    pages: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,6 +298,7 @@ class DashboardSync:
 
         created = updated = failed = 0
         written: set[str] = set()
+        pages: dict[str, str] = {}
         for row in rows:
             written.add(row.skill_id)
             try:
@@ -301,24 +306,36 @@ class DashboardSync:
                 if page_id:
                     self.client.update_skill(page_id, skill_properties(row))
                     updated += 1
+                    pages[row.skill_id] = page_id
                 else:
-                    self.client.create_skill(skill_properties(row))
+                    pages[row.skill_id] = self.client.create_skill(skill_properties(row))
                     created += 1
             except (OSError, ValueError, KeyError) as exc:
                 failed += 1
                 print(f"  ! 스킬 {row.skill_id}: 대시보드 적재 실패 ({exc})", file=sys.stderr)
 
-        leftovers = [page_id for skill_id, page_id in existing.items() if skill_id not in written]
+        leftovers = [(skill_id, page_id) for skill_id, page_id in existing.items() if skill_id not in written]
+        cleared = 0
+        for _, page_id in leftovers:
+            try:
+                # 보관하지 않는다. 강의 DB 가 이 행과 관계를 맺으므로 행이 사라지면
+                # 연결이 끊긴다. 오늘 요구가 없다는 사실만 남긴다.
+                self.client.update_skill(page_id, {"요구 공고 수": {"number": 0}, "요구 회사": {"multi_select": []}})
+                cleared += 1
+            except (OSError, ValueError, KeyError) as exc:
+                failed += 1
+                print(f"  ! 스킬 행 정리 실패 ({exc})", file=sys.stderr)
+
         archived = 0
-        for page_id in (*leftovers, *duplicates):
+        for page_id in duplicates:
             try:
                 self.client.archive(page_id)
                 archived += 1
             except (OSError, ValueError, KeyError) as exc:
                 failed += 1
-                print(f"  ! 스킬 행 보관 실패 ({exc})", file=sys.stderr)
+                print(f"  ! 스킬 중복 행 보관 실패 ({exc})", file=sys.stderr)
 
-        return SkillSyncResult(created=created, updated=updated, archived=archived, failed=failed)
+        return SkillSyncResult(created=created, updated=updated, cleared=cleared, failed=failed, pages=pages)
 
     def write_summary(self, summary: Summary, run_date: str) -> bool:
         heading_id, stale = blocks_to_replace(self.client.page_children(), self.client.block_children)

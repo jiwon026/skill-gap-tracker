@@ -5,12 +5,19 @@
 """
 import pytest
 
+from analyze.recommend import DIRECT, FOUNDATION
+from report.course_notion import COURSE_DB_PROPERTIES, COURSE_STATUSES, LISTINGS, OPEN_RECOMMENDATION
 from report.dashboard import MISSING, OWNED, SKILL_DB_PROPERTIES, SUMMARY_HEADING
 from report.dashboard_layout import (
+    COURSE_COLUMNS,
+    COURSE_PAGE,
     GAP_COLUMNS,
     JOB_COLUMNS,
     OWNED_COLUMNS,
+    build_courses,
     build_dashboard,
+    course_database_payload,
+    course_view_patch,
     gap_view_payload,
     jobs_view_payload,
     owned_view_patch,
@@ -99,11 +106,19 @@ class ScriptedNotion:
         if method == "POST" and path == "/pages":
             return {"id": f"page-{body['properties']['title']['title'][0]['text']['content']}"}
         if method == "POST" and path == "/databases":
+            if body["title"][0]["text"]["content"] == "강의":
+                return {"id": "course-db", "data_sources": [{"id": "course-ds"}]}
+            return {"id": "skill-db", "data_sources": [{"id": "skill-ds"}]}
+        if method == "GET" and path == "/databases/skill-db":
             return {"id": "skill-db", "data_sources": [{"id": "skill-ds"}]}
         if method == "GET" and path == "/data_sources/skill-ds":
             return {"properties": {n: {"id": i} for n, i in SKILL_PROPS.items()}}
+        if method == "GET" and path == "/data_sources/course-ds":
+            return {"properties": {n: {"id": f"c-{i}"} for i, n in enumerate(COURSE_DB_PROPERTIES)}}
         if method == "GET" and path.startswith("/views?database_id=skill-db"):
             return {"results": [{"id": "default-view"}]}
+        if method == "GET" and path.startswith("/views?database_id=course-db"):
+            return {"results": [{"id": "course-view"}]}
         return {"id": "ok"}
 
 
@@ -121,9 +136,10 @@ def test_build_dashboard_creates_everything_in_order():
     assert ("PATCH", "/views/default-view") in [(m, p) for m, p, _ in notion.calls]
     pages = [body["properties"]["title"]["title"][0]["text"]["content"]
              for m, p, body in notion.calls if m == "POST" and p == "/pages"]
-    assert pages == ["나의 스킬", "역량 갭"]
+    assert pages == ["나의 스킬", "역량 갭", COURSE_PAGE]
     database = next(body for m, p, body in notion.calls if m == "POST" and p == "/databases")
     assert database["parent"] == {"type": "page_id", "page_id": "page-나의 스킬"}
+    assert ids.course_database_id == "course-db"
 
 
 def test_jobs_link_is_a_url_paragraph_not_a_link_to_page():
@@ -138,3 +154,57 @@ def test_jobs_link_is_a_url_paragraph_not_a_link_to_page():
             and (b["paragraph"]["rich_text"][0]["text"].get("link") or {}).get("url")]
     assert len(link) == 1
     assert link[0]["paragraph"]["rich_text"][0]["text"]["link"]["url"] == "https://notion.so/jobs-db"
+
+
+def test_course_database_relates_to_the_skill_database():
+    body = course_database_payload("page", "skill-ds")
+    props = body["initial_data_source"]["properties"]
+    assert set(props) == set(COURSE_DB_PROPERTIES)
+    assert props["스킬"]["relation"]["data_source_id"] == "skill-ds"
+    assert [o["name"] for o in props["추천 현황"]["select"]["options"]] == list(LISTINGS)
+    assert [o["name"] for o in props["상태"]["select"]["options"]] == list(COURSE_STATUSES)
+    # 하드코딩한 "직접"/"기반" 이 analyze.recommend 의 종류 상수와 갈라지면
+    # 강의 DB 의 '연결' 열 값이 추천이 실제로 쓰는 kind 와 달라진다.
+    assert [o["name"] for o in props["연결"]["select"]["options"]] == [DIRECT, FOUNDATION]
+
+
+def test_course_view_shows_open_recommendations_only():
+    props = {name: f"c-{i}" for i, name in enumerate(COURSE_DB_PROPERTIES)}
+    patch = course_view_patch(props)
+    assert patch["filter"] == {"property": "추천 현황", "select": {"equals": OPEN_RECOMMENDATION}}
+    shown = [c["property_id"] for c in patch["configuration"]["properties"] if c["visible"]]
+    assert shown == [props[n] for n in COURSE_COLUMNS]
+
+
+class ScriptedCourses(ScriptedNotion):
+    def __call__(self, method, path, body):
+        if method == "GET" and path == "/databases/skill-db":
+            self.calls.append((method, path, body))
+            return {"id": "skill-db", "data_sources": [{"id": "skill-ds"}]}
+        if method == "GET" and path.startswith("/views?database_id=course-db"):
+            self.calls.append((method, path, body))
+            return {"results": [{"id": "course-view"}]}
+        if method == "POST" and path == "/databases" and body["title"][0]["text"]["content"] == "강의":
+            self.calls.append((method, path, body))
+            return {"id": "course-db", "data_sources": [{"id": "course-ds"}]}
+        if method == "GET" and path == "/data_sources/course-ds":
+            self.calls.append((method, path, body))
+            return {"properties": {n: {"id": f"c-{i}"} for i, n in enumerate(COURSE_DB_PROPERTIES)}}
+        return super().__call__(method, path, body)
+
+
+def test_build_courses_adds_a_page_and_database_to_an_existing_dashboard():
+    notion = ScriptedCourses()
+    course_db = build_courses(notion, page_id="dash", skill_database_id="skill-db")
+
+    assert course_db == "course-db"
+    pages = [body["properties"]["title"]["title"][0]["text"]["content"]
+             for m, p, body in notion.calls if m == "POST" and p == "/pages"]
+    assert pages == [COURSE_PAGE]
+    course_db_body = next(body for m, p, body in notion.calls
+                           if m == "POST" and p == "/databases" and body["title"][0]["text"]["content"] == "강의")
+    assert course_db_body["parent"] == {"type": "page_id", "page_id": f"page-{COURSE_PAGE}"}
+    assert ("PATCH", "/views/course-view") in [(m, p) for m, p, _ in notion.calls]
+    # 대시보드 페이지에는 제목만 더한다. 기존 블록은 건드리지 않는다.
+    appended = [b for m, p, body in notion.calls if p == "/blocks/dash/children" for b in body["children"]]
+    assert all(b["type"] == "heading_2" for b in appended) or appended == []

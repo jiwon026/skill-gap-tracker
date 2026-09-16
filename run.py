@@ -15,18 +15,22 @@ import importlib
 import os
 import pkgutil
 import sys
+import time
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import yaml
 
 from analyze.gap import AnalyzedPosting, compute_gap
 from analyze.priority import assign_priority, priority_rank
-from analyze.skill_board import build_skill_rows
+from analyze.recommend import Recommendation, recommend, search_terms, target_skills
+from analyze.skill_board import SkillRow, build_skill_rows
 from collect import greenhouse, saramin, woowahan
+from collect.training import REQUEST_INTERVAL_SEC, fetch_own_fee, search_courses, with_own_fee
+from report.course_notion import CourseSync
 
 #: 저장소에 넣지 않는 개인용 수집기를 두는 패키지(.gitignore). 모듈마다
 #: DEFAULT_SPEC, fetch_payload(spec, cache), parse_board, LABEL 을 갖고,
@@ -98,6 +102,10 @@ def missing_personal_configs() -> tuple[str, ...]:
 
 def _config(name: str) -> dict:
     return yaml.safe_load(_config_path(name).read_text(encoding="utf-8")) or {}
+
+
+def _training_config() -> dict:
+    return _config("training.yaml")
 
 
 def _enabled(entries: Iterable[dict]) -> list[dict]:
@@ -461,17 +469,165 @@ def publish_dashboard(rows: Sequence[AnalyzedPosting], *, created: int, run_date
             rows, skill_entries=skill_entries, tool_ids=tool_ids, experiences=experience_book
         )
         result = dashboard.sync_skills(skills)
-        written = dashboard.write_summary(summarize(rows, created=created), run_date)
     except Exception as exc:
         # 대시보드는 덤이다. 어떤 예외가 나든 경고만 남기고 파이프라인의
         # 종료 코드는 절대 건드리지 않는다.
         print(f"  ! 대시보드 갱신 실패: {exc}", file=sys.stderr)
         return
 
+    # 요약 카드 쓰기는 스킬 DB 갱신과 따로 가둔다. 여기서 실패해도 강의
+    # 추천은 스킬 DB 가 이미 준 정보(skills, result.pages)로 그대로 이어져야 한다.
+    try:
+        written = dashboard.write_summary(summarize(rows, created=created), run_date)
+    except Exception as exc:
+        print(f"  ! 대시보드 갱신 실패: {exc}", file=sys.stderr)
+        written = False
+
     note = "" if written else ", 요약 못 씀"
     print(
         f"[대시보드] 스킬 신규 {result.created}, 갱신 {result.updated},"
-        f" 보관 {result.archived}, 실패 {result.failed}{note}"
+        f" 정리 {result.cleared}, 실패 {result.failed}{note}"
+    )
+    publish_courses(skills, result.pages, run_date=run_date)
+
+
+def _search_terms_for(
+    targets: Sequence[SkillRow],
+    entries: Mapping[str, Mapping[str, Any]],
+    *,
+    auth_key: str,
+    start: date,
+    end: str,
+    config: Mapping[str, Any],
+    cache_dir: Path,
+    run_date: str,
+    sleep: Callable[[float], Any] | None = None,
+) -> dict[str, tuple]:
+    """검색어별 과정 목록. 검색어 하나가 실패해도 나머지 검색어는 이어간다.
+
+    실패한 검색어는 빈 목록으로 남는다. recommend() 는 그 검색어에서 아무
+    과정도 못 찾은 것으로 보고, 다른 검색어의 결과는 그대로 추천에 쓴다.
+    """
+    sleep = sleep or time.sleep
+    courses_by_term: dict[str, tuple] = {}
+    for skill in targets:
+        for term, _ in search_terms(entries.get(skill.skill_id, {})):
+            if term in courses_by_term:
+                continue
+            if courses_by_term:
+                # 고용24 목록 API 에 연달아 요청을 보내지 않는다.
+                sleep(REQUEST_INTERVAL_SEC)
+            try:
+                courses_by_term[term] = search_courses(
+                    auth_key,
+                    term,
+                    start_date=start.strftime("%Y%m%d"),
+                    end_date=end,
+                    pages=config["pages"],
+                    cache_dir=cache_dir,
+                    today=run_date,
+                    cache_days=config["list_cache_days"],
+                )
+            except (OSError, ValueError, KeyError) as exc:
+                print(f"  ! 강의 검색 실패 ({term}): {exc}", file=sys.stderr)
+                courses_by_term[term] = ()
+    return courses_by_term
+
+
+def _price(
+    recommendations: Sequence[Recommendation],
+    *,
+    auth_key: str,
+    cache_dir: Path,
+    run_date: str,
+    cache_days: int,
+    sleep: Callable[[float], Any] | None = None,
+) -> list[Recommendation]:
+    """본인부담액을 붙인다. 추천에 남은 과정만 조회한다(목록에는 없는 값이다).
+
+    한 과정의 조회가 실패해도 나머지 과정은 이어간다. 실패한 과정은
+    own_fee 없이 그대로 올린다. 금액 하나 때문에 추천 전체를 버릴 이유가 없다.
+    """
+    sleep = sleep or time.sleep
+    priced: list[Recommendation] = []
+    for index, rec in enumerate(recommendations):
+        if index:
+            sleep(REQUEST_INTERVAL_SEC)
+        try:
+            own_fee = fetch_own_fee(
+                auth_key, rec.course, cache_dir=cache_dir, today=run_date, cache_days=cache_days,
+            )
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"  ! 본인부담액 조회 실패 ({rec.course.key}): {exc}", file=sys.stderr)
+            own_fee = None
+        priced.append(replace(rec, course=with_own_fee(rec.course, own_fee)))
+    return priced
+
+
+def publish_courses(
+    skills: Sequence[SkillRow], skill_pages: Mapping[str, str], *, run_date: str
+) -> None:
+    """부족 스킬에 맞는 훈련과정을 찾아 강의 DB 에 올린다.
+
+    대시보드의 덤이다. 여기서 무엇이 실패하든 경고만 남기고 종료 코드는 그대로 둔다.
+    """
+    auth_key = os.environ.get("WORK24_TRAINING_KEY", "").strip()
+    if not auth_key:
+        print("[강의] WORK24_TRAINING_KEY 가 없어 건너뜁니다", file=sys.stderr)
+        return
+
+    courses_sync = CourseSync.from_env()
+    if courses_sync is None:
+        print("[강의] NOTION_COURSE_DATABASE_ID 가 없어 건너뜁니다", file=sys.stderr)
+        return
+
+    try:
+        config = _training_config()
+        entries = {entry["id"]: entry for entry in _config("skills.yaml")["skills"]}
+        targets = target_skills(skills, min_demand=config["min_demand"])
+
+        today = date.fromisoformat(run_date)
+        end = (today + timedelta(days=config["window_days"])).strftime("%Y%m%d")
+        cache_dir = ROOT / "store" / "raw" / "work24"
+
+        courses_by_term = _search_terms_for(
+            targets, entries, auth_key=auth_key, start=today, end=end,
+            config=config, cache_dir=cache_dir, run_date=run_date,
+        )
+
+        recommendations = recommend(
+            targets,
+            entries,
+            courses_by_term,
+            per_skill=config["per_skill"],
+            today=run_date,
+            metro_prefixes=tuple(config["metro_prefixes"]),
+            exclude_targets=tuple(config["exclude_targets"]),
+            exclude_title_words=tuple(config["exclude_title_words"]),
+        )
+
+        priced = _price(
+            recommendations, auth_key=auth_key, cache_dir=cache_dir, run_date=run_date,
+            cache_days=config["detail_cache_days"],
+        )
+
+        result = courses_sync.push(priced, skill_pages)
+        if priced:
+            retired = courses_sync.retire(rec.key for rec in priced)
+        else:
+            # 추천이 0건인 날은 침묵으로 본다. 공고 DB 의 retire 는
+            # complete_sources 로 소스가 죽은 날과 공고가 진짜 마감된 날을
+            # 가르지만, 강의 목록에는 그런 신호가 없다. 0건이 API 장애인지
+            # 정말 추천할 과정이 없는지 알 수 없으므로 정리하지 않는다.
+            print("  ! 강의 추천 결과가 없어 지난 추천 정리를 건너뜁니다", file=sys.stderr)
+            retired = 0
+    except Exception as exc:
+        print(f"  ! 강의 추천 실패: {exc}", file=sys.stderr)
+        return
+
+    print(
+        f"[강의] 대상 스킬 {len(targets)}, 추천 {len(priced)},"
+        f" 신규 {result.created}, 갱신 {result.updated}, 지난 추천 {retired}, 실패 {result.failed}"
     )
 
 

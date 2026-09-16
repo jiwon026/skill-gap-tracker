@@ -130,12 +130,38 @@ powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 07:30
    .venv/Scripts/python setup_notion.py "<대시보드 페이지 URL>" --dashboard
    ```
 
-3. 출력된 `NOTION_DASHBOARD_PAGE_ID`, `NOTION_SKILL_DATABASE_ID` 를 환경변수로 넣습니다.
+3. 출력된 `NOTION_DASHBOARD_PAGE_ID`, `NOTION_SKILL_DATABASE_ID`, `NOTION_COURSE_DATABASE_ID` 를 환경변수로 넣습니다.
 
 - Notion 무료 요금제는 차트 보기 개수가 제한될 수 있습니다. 이 대시보드는 부족 스킬 차트 1개를 씁니다.
 - 요약 숫자는 매일 실행 때 '요약' 제목 바로 뒤의 텍스트와 카드 블록만 다시 씁니다. 첫 제목이나 그 밖의 블록(보기, 하위 페이지 등)을 만나면 거기서 멈추므로, 그 자리에 직접 적은 내용은 교체됩니다.
 - 스킬 DB 는 `config/profile.yaml`, `config/experience.yaml` 기준으로 매일 덮어씁니다. 스킬은 설정 파일에서 고치세요.
 - `--dashboard` 를 다시 실행하면 구조를 한 번 더 만듭니다. 페이지 하나당 한 번만 실행하세요. 다시 만들고 싶으면 그 페이지의 블록을 먼저 지우고 실행하세요.
+
+### 추천 강의 (선택)
+
+부족한 스킬 중 모집중 공고 여러 건이 요구하는 것에 대해, 고용24 국민내일배움카드
+훈련과정을 찾아 대시보드의 "추천 강의" 페이지에 스킬별로 올립니다. 위 `--dashboard` 가
+이미 이 페이지와 강의 DB 까지 함께 만들어서, 보통은 아래 `--courses` 를 따로 실행할
+필요가 없습니다.
+
+1. [고용24 OPEN-API](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiIntro.do)에서
+   "국민내일배움카드 훈련과정" 인증키를 받아 `WORK24_TRAINING_KEY` 에 넣습니다.
+2. `--courses` 는 이 기능이 생기기 전에 이미 만들어 둔 대시보드에만 씁니다. 위
+   대시보드 환경변수(`NOTION_DASHBOARD_PAGE_ID`, `NOTION_SKILL_DATABASE_ID`)를 먼저
+   넣은 뒤 실행하세요.
+
+   ```bash
+   .venv/Scripts/python setup_notion.py "<대시보드 페이지 URL>" --courses
+   ```
+
+3. 출력된 `NOTION_COURSE_DATABASE_ID` 를 환경변수로 넣습니다.
+
+- 검색어는 `config/skills.yaml` 의 `training` 에 적습니다. `direct` 는 그 도구를 직접
+  다루는 과정, `foundation` 은 기반 역량 과정입니다. 도구 이름이 과정명에 없는 스킬이
+  많아서 둘을 나눠 두고, 강의 DB 의 '연결' 열에 그대로 표시합니다.
+- 조건은 `config/training.yaml` 에서 바꿉니다(기간, 스킬당 건수, 지역, 제외 대상).
+- 강의 DB 의 '상태'는 사용자 열입니다. 자동 실행이 덮어쓰지 않고, 추천에서 빠진
+  과정도 지우지 않고 '지난 추천'으로만 바꿉니다.
 
 ## 테스트
 

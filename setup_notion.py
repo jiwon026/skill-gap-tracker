@@ -29,7 +29,7 @@ from typing import Any, Callable, Sequence
 from analyze.priority import PRIORITIES
 from check_notion import EXPECTED
 from extract.company_size import SIZES, UNKNOWN
-from report.dashboard_layout import VIEWS_API_VERSION, build_dashboard
+from report.dashboard_layout import VIEWS_API_VERSION, build_courses, build_dashboard
 from report.notion import API_ROOT, INITIAL_STATUS, LISTING_STATUSES, NOTION_VERSION, TIMEOUT_SEC, notion_request
 
 DEFAULT_TITLE = "지원 보드"
@@ -49,6 +49,9 @@ SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
 }
 
 _HEX_ID = re.compile(r"([0-9a-f]{8})-?([0-9a-f]{4})-?([0-9a-f]{4})-?([0-9a-f]{4})-?([0-9a-f]{12})", re.I)
+
+#: 대시보드 설정 안내에서 줄 수를 그대로 읽는 한국어 숫자.
+_COUNT_WORDS = {2: "두", 3: "세"}
 
 
 def page_id_from(value: str) -> str:
@@ -135,11 +138,48 @@ def _setup_dashboard(token: str, page_id: str, *, opener: Callable[..., Any]) ->
         print(_PARTIAL_BUILD_HINT, file=sys.stderr)
         return 1
 
+    env_lines = [
+        ("NOTION_DASHBOARD_PAGE_ID", ids.page_id),
+        ("NOTION_SKILL_DATABASE_ID", ids.skill_database_id),
+    ]
+    if ids.course_database_id:
+        env_lines.append(("NOTION_COURSE_DATABASE_ID", ids.course_database_id))
+
     print("대시보드를 만들었습니다.")
-    print("\n환경변수 두 개를 넣으세요 (PowerShell):")
-    print(f'  setx NOTION_DASHBOARD_PAGE_ID "{ids.page_id}"')
-    print(f'  setx NOTION_SKILL_DATABASE_ID "{ids.skill_database_id}"')
+    print(f"\n환경변수 {_COUNT_WORDS.get(len(env_lines), len(env_lines))} 개를 넣으세요 (PowerShell):")
+    for name, value in env_lines:
+        print(f'  setx {name} "{value}"')
     print("\n다음 자동 실행부터 요약 숫자와 스킬 DB 가 채워집니다.")
+    return 0
+
+
+def _setup_courses(token: str, page_id: str, *, opener: Callable[..., Any]) -> int:
+    skill_database_id = os.environ.get("NOTION_SKILL_DATABASE_ID", "").strip()
+    if not skill_database_id:
+        print("NOTION_SKILL_DATABASE_ID 가 없습니다. 대시보드를 먼저 만드세요.", file=sys.stderr)
+        return 1
+
+    def request(method: str, path: str, body):
+        return notion_request(token, method, path, body, version=VIEWS_API_VERSION, opener=opener)
+
+    try:
+        course_database_id = build_courses(request, page_id=page_id, skill_database_id=skill_database_id)
+    except urllib.error.HTTPError as exc:
+        print(_diagnose(exc), file=sys.stderr)
+        print(_PARTIAL_BUILD_HINT, file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Notion 에 연결하지 못했습니다: {exc}", file=sys.stderr)
+        print(_PARTIAL_BUILD_HINT, file=sys.stderr)
+        return 1
+    except (KeyError, IndexError, ValueError) as exc:
+        print(f"강의 DB 를 만들다 멈췄습니다: {exc}", file=sys.stderr)
+        print(_PARTIAL_BUILD_HINT, file=sys.stderr)
+        return 1
+
+    print("추천 강의 페이지와 강의 DB 를 만들었습니다.")
+    print("\n환경변수를 넣으세요 (PowerShell):")
+    print(f'  setx NOTION_COURSE_DATABASE_ID "{course_database_id}"')
     return 0
 
 
@@ -157,6 +197,11 @@ def main(argv: Sequence[str] | None = None, *, opener: Callable[..., Any] = urll
         action="store_true",
         help="이 페이지에 대시보드를 만든다 (NOTION_DATABASE_ID 의 공고 DB 기준)",
     )
+    parser.add_argument(
+        "--courses",
+        action="store_true",
+        help="이미 있는 대시보드에 추천 강의 페이지와 강의 DB 만 더한다",
+    )
     args = parser.parse_args(argv)
 
     token = os.environ.get("NOTION_TOKEN", "").strip()
@@ -171,6 +216,9 @@ def main(argv: Sequence[str] | None = None, *, opener: Callable[..., Any] = urll
 
     if args.dashboard:
         return _setup_dashboard(token, page_id, opener=opener)
+
+    if args.courses:
+        return _setup_courses(token, page_id, opener=opener)
 
     try:
         created = create_database(token, page_id, title=args.title, opener=opener)

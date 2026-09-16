@@ -13,6 +13,8 @@ import pytest
 
 import run
 from collect.schema import CompanyProfile, Posting
+from report.course_notion import CourseSyncResult
+from report.dashboard import SkillSyncResult
 
 FETCHED = "2026-09-09T00:00:00+09:00"
 
@@ -392,9 +394,7 @@ class TestPublishDashboard:
         class Recorder:
             def sync_skills(self, rows):
                 captured["rows"] = rows
-                from report.dashboard import SkillSyncResult
-
-                return SkillSyncResult(created=0, updated=0, archived=0, failed=0)
+                return SkillSyncResult(created=0, updated=0, cleared=0, failed=0, pages={})
 
             def write_summary(self, summary, run_date):
                 captured["summary"] = summary
@@ -409,11 +409,9 @@ class TestPublishDashboard:
         assert captured["summary"].new_postings == 2
 
     def test_row_building_failure_is_reported_not_raised(self, monkeypatch, capsys):
-        from report.dashboard import SkillSyncResult
-
         class Working:
             def sync_skills(self, rows):
-                return SkillSyncResult(created=0, updated=0, archived=0, failed=0)
+                return SkillSyncResult(created=0, updated=0, cleared=0, failed=0, pages={})
 
             def write_summary(self, summary, run_date):
                 return True
@@ -436,6 +434,31 @@ class TestPublishDashboard:
         monkeypatch.setattr(run.DashboardSync, "from_env", classmethod(lambda cls: Broken()))
         run.publish_dashboard((), created=0, run_date="2026-09-15")
         assert "shape" in capsys.readouterr().err
+
+    def test_a_failed_summary_write_does_not_skip_the_course_recommendations(self, monkeypatch, capsys):
+        """write_summary 가 실패해도 강의 추천은 그대로 이어져야 한다.
+        요약과 스킬 DB 갱신을 한 try 로 묶으면, 요약만 죽어도 추천이 통째로 건너뛰어진다."""
+        class Broken:
+            def sync_skills(self, rows):
+                from report.dashboard import SkillSyncResult
+
+                return SkillSyncResult(created=0, updated=0, cleared=0, failed=0, pages={"powerbi": "p1"})
+
+            def write_summary(self, summary, run_date):
+                raise OSError("summary write failed")
+
+        monkeypatch.setattr(run.DashboardSync, "from_env", classmethod(lambda cls: Broken()))
+
+        called = {}
+
+        def fake_publish_courses(skills, pages, *, run_date):
+            called["pages"] = pages
+
+        monkeypatch.setattr(run, "publish_courses", fake_publish_courses)
+        run.publish_dashboard((), created=0, run_date="2026-09-15")
+
+        assert called == {"pages": {"powerbi": "p1"}}
+        assert "summary write failed" in capsys.readouterr().err
 
 
 class TestPublish:
@@ -465,3 +488,230 @@ class TestPublish:
 
         assert recorded["created"] == 3
         assert recorded["run_date"] == "2026-09-15"
+
+
+def _training_course(course_id, *, title="Power BI 입문", start="2026-10-01"):
+    from collect.training import Course
+
+    return Course(
+        course_id=course_id, degree="1", institution_id="I1", title=title,
+        institution="어느학원", address="서울 강남구", start=start, end="2026-11-30",
+        target="국민내일배움카드(일반)", weekend="3", satisfaction=90.0, capacity=20,
+        applicants=3, total_fee=300000, url="https://work24.go.kr/x",
+    )
+
+
+def _fake_config(*, skills, training):
+    """publish_courses 가 부르는 두 설정만 대역으로 준다."""
+    def config(name):
+        if name == "skills.yaml":
+            return skills
+        if name == "training.yaml":
+            return training
+        raise AssertionError(f"이 테스트가 예상하지 않은 설정: {name}")
+
+    return config
+
+
+DEFAULT_TRAINING_CFG = dict(
+    window_days=90, min_demand=2, per_skill=5, pages=1,
+    list_cache_days=7, detail_cache_days=30,
+    metro_prefixes=["서울"], exclude_targets=[], exclude_title_words=[],
+)
+
+
+class TestPublishCourses:
+    """훈련 추천은 대시보드의 덤이다. 실패해도 경고만 남긴다."""
+
+    @pytest.fixture(autouse=True)
+    def no_sleep(self, monkeypatch):
+        """검색어와 본인부담액 사이의 페이싱이 테스트를 느리게 만들지 않게 한다."""
+        calls = []
+        monkeypatch.setattr(run.time, "sleep", lambda seconds: calls.append(seconds))
+        self.sleep_calls = calls
+
+    def test_skipped_without_the_key(self, monkeypatch, capsys):
+        monkeypatch.delenv("WORK24_TRAINING_KEY", raising=False)
+        run.publish_courses((), {}, run_date="2026-09-16")
+        assert "WORK24_TRAINING_KEY" in capsys.readouterr().err
+
+    def test_skipped_without_the_course_database(self, monkeypatch, capsys):
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: None))
+        run.publish_courses((), {}, run_date="2026-09-16")
+        assert "NOTION_COURSE_DATABASE_ID" in capsys.readouterr().err
+
+    def test_failure_is_reported_not_raised(self, monkeypatch, capsys):
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: object()))
+        monkeypatch.setattr(run, "search_courses", lambda *a, **k: (_ for _ in ()).throw(OSError("api down")))
+        run.publish_courses((run.SkillRow(skill_id="powerbi", name="Power BI", category="bi", owned=False,
+                                          evidence=(), demand=3, companies=("쿠팡",)),),
+                            {"powerbi": "p1"}, run_date="2026-09-16")
+        assert "api down" in capsys.readouterr().err
+
+    def test_searches_only_for_skills_over_the_threshold(self, monkeypatch, capsys):
+        calls = []
+
+        class Recorder:
+            def push(self, recs, pages):
+                calls.append(("push", len(list(recs))))
+                return CourseSyncResult(created=0, updated=0, failed=0)
+
+            def retire(self, keys):
+                calls.append(("retire", len(set(keys))))
+                return 0
+
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: Recorder()))
+        monkeypatch.setattr(run, "search_courses", lambda *a, **k: calls.append(("search", k.get("query", a[1]))) or ())
+
+        rows = [
+            run.SkillRow(skill_id="powerbi", name="Power BI", category="bi", owned=False,
+                         evidence=(), demand=3, companies=("쿠팡",)),
+            run.SkillRow(skill_id="ga4", name="GA4", category="product_analytics", owned=False,
+                         evidence=(), demand=1, companies=("쿠팡",)),
+        ]
+        run.publish_courses(rows, {"powerbi": "p1", "ga4": "p2"}, run_date="2026-09-16")
+
+        searched = [c for c in calls if c[0] == "search"]
+        assert searched, "공고 2건 이상인 스킬은 검색해야 한다"
+        assert all("GA4" not in str(c[1]) for c in searched)
+
+    def test_a_failing_search_term_still_recommends_the_other_terms_courses(self, monkeypatch, capsys):
+        """검색어 하나가 죽어도 나머지 검색어의 과정은 그대로 추천에 남는다."""
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+
+        class Recorder:
+            def push(self, recs, pages):
+                self.recs = list(recs)
+                return CourseSyncResult(created=0, updated=0, failed=0)
+
+            def retire(self, keys):
+                return 0
+
+        recorder = Recorder()
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: recorder))
+        monkeypatch.setattr(
+            run, "_config",
+            _fake_config(
+                skills={"skills": [{"id": "powerbi", "training": {"direct": ["실패어", "성공어"]}}]},
+                training=DEFAULT_TRAINING_CFG,
+            ),
+        )
+        good_course = _training_course("G1")
+
+        def fake_search(auth_key, term, **kwargs):
+            if term == "실패어":
+                raise OSError("검색 서버 오류")
+            return (good_course,)
+
+        monkeypatch.setattr(run, "search_courses", fake_search)
+        monkeypatch.setattr(run, "fetch_own_fee", lambda *a, **k: None)
+
+        rows = [run.SkillRow(skill_id="powerbi", name="Power BI", category="bi", owned=False,
+                              evidence=(), demand=3, companies=("쿠팡",))]
+        run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
+
+        assert [r.course.course_id for r in recorder.recs] == ["G1"]
+        err = capsys.readouterr().err
+        assert "강의 검색 실패 (실패어)" in err and "검색 서버 오류" in err
+
+    def test_a_failing_own_fee_lookup_still_pushes_the_course_with_none(self, monkeypatch, capsys):
+        """본인부담액 조회 하나가 죽어도 그 과정은 own_fee 없이 그대로 올라간다."""
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+
+        class Recorder:
+            def push(self, recs, pages):
+                self.recs = list(recs)
+                return CourseSyncResult(created=0, updated=0, failed=0)
+
+            def retire(self, keys):
+                return 0
+
+        recorder = Recorder()
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: recorder))
+        monkeypatch.setattr(
+            run, "_config",
+            _fake_config(
+                skills={"skills": [{"id": "powerbi", "training": {"direct": ["Power BI"]}}]},
+                training=DEFAULT_TRAINING_CFG,
+            ),
+        )
+        monkeypatch.setattr(run, "search_courses", lambda *a, **k: (_training_course("G1"),))
+        monkeypatch.setattr(
+            run, "fetch_own_fee",
+            lambda *a, **k: (_ for _ in ()).throw(ValueError("본인부담액 파싱 실패")),
+        )
+
+        rows = [run.SkillRow(skill_id="powerbi", name="Power BI", category="bi", owned=False,
+                              evidence=(), demand=3, companies=("쿠팡",))]
+        run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
+
+        assert len(recorder.recs) == 1
+        assert recorder.recs[0].course.own_fee is None
+        err = capsys.readouterr().err
+        assert "본인부담액 조회 실패" in err and "본인부담액 파싱 실패" in err
+
+    def test_retire_is_skipped_when_there_are_no_recommendations(self, monkeypatch, capsys):
+        """추천이 0건인 날은 지난 추천을 정리하지 않는다. 강의 목록에는 공고의
+        complete_sources 같은, 죽은 소스와 빈 결과를 가를 신호가 없기 때문이다."""
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+
+        class Recorder:
+            retire_called = False
+
+            def push(self, recs, pages):
+                return CourseSyncResult(created=0, updated=0, failed=0)
+
+            def retire(self, keys):
+                Recorder.retire_called = True
+                return 0
+
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: Recorder()))
+        monkeypatch.setattr(run, "search_courses", lambda *a, **k: ())
+
+        rows = [run.SkillRow(skill_id="powerbi", name="Power BI", category="bi", owned=False,
+                              evidence=(), demand=3, companies=("쿠팡",))]
+        run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
+
+        assert Recorder.retire_called is False
+        out, err = capsys.readouterr()
+        assert "지난 추천 0" in out
+        assert "강의 추천 결과가 없어 지난 추천 정리를 건너뜁니다" in err
+
+    def test_sleeps_between_search_terms_and_between_own_fee_calls(self, monkeypatch):
+        """검색어 사이, 본인부담액 조회 사이에 REQUEST_INTERVAL_SEC 만큼 쉰다."""
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+
+        class Recorder:
+            def push(self, recs, pages):
+                self.recs = list(recs)
+                return CourseSyncResult(created=0, updated=0, failed=0)
+
+            def retire(self, keys):
+                return 0
+
+        recorder = Recorder()
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: recorder))
+        monkeypatch.setattr(
+            run, "_config",
+            _fake_config(
+                skills={"skills": [{"id": "powerbi", "training": {"direct": ["검색어1", "검색어2"]}}]},
+                training=DEFAULT_TRAINING_CFG,
+            ),
+        )
+
+        def fake_search(auth_key, term, **kwargs):
+            return (_training_course(f"{term}-C"),)
+
+        monkeypatch.setattr(run, "search_courses", fake_search)
+        monkeypatch.setattr(run, "fetch_own_fee", lambda *a, **k: None)
+
+        rows = [run.SkillRow(skill_id="powerbi", name="Power BI", category="bi", owned=False,
+                              evidence=(), demand=3, companies=("쿠팡",))]
+        run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
+
+        assert len(recorder.recs) == 2
+        # 검색어 2개 사이 1번, 본인부담액 조회 2건 사이 1번.
+        assert self.sleep_calls.count(run.REQUEST_INTERVAL_SEC) >= 2

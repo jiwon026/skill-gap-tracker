@@ -149,6 +149,7 @@ class TestDashboardFlag:
         assert "NOTION_DATABASE_ID" in capsys.readouterr().err
 
     def test_prints_the_two_env_vars(self, monkeypatch, capsys):
+        """강의 DB 없이 대시보드만 만들어지면 안내도 두 줄이어야 한다."""
         from report.dashboard_layout import DashboardIds
 
         monkeypatch.setenv("NOTION_TOKEN", "tok")
@@ -163,8 +164,27 @@ class TestDashboardFlag:
         assert setup_notion.main([PAGE_ID, "--dashboard"]) == 0
         out = capsys.readouterr().out
         assert seen == {"page_id": PAGE_ID, "jobs": "jobs"}
+        assert "환경변수 두 개를 넣으세요" in out
         assert "NOTION_DASHBOARD_PAGE_ID" in out and PAGE_ID in out
         assert "NOTION_SKILL_DATABASE_ID" in out and "skill-db" in out
+        assert "NOTION_COURSE_DATABASE_ID" not in out
+
+    def test_prints_three_env_vars_when_the_course_database_is_also_built(self, monkeypatch, capsys):
+        """build_dashboard 는 이제 강의 DB 까지 함께 만든다. 안내 줄 수가
+        실제로 찍는 setx 줄 수와 갈라지면 안 된다."""
+        from report.dashboard_layout import DashboardIds
+
+        monkeypatch.setenv("NOTION_TOKEN", "tok")
+        monkeypatch.setenv("NOTION_DATABASE_ID", "jobs")
+
+        def fake_build(request, *, page_id, jobs_database_id):
+            return DashboardIds(page_id=page_id, skill_database_id="skill-db", course_database_id="course-db")
+
+        monkeypatch.setattr(setup_notion, "build_dashboard", fake_build)
+        assert setup_notion.main([PAGE_ID, "--dashboard"]) == 0
+        out = capsys.readouterr().out
+        assert "환경변수 세 개를 넣으세요" in out
+        assert "NOTION_COURSE_DATABASE_ID" in out and "course-db" in out
 
     def test_network_drop_also_shows_the_partial_build_hint(self, monkeypatch, capsys):
         """중간에 연결이 끊겨도 페이지에는 이미 일부 블록이 생겨 있을 수 있다.
@@ -180,3 +200,19 @@ class TestDashboardFlag:
         err = capsys.readouterr().err
         assert "boom" in err
         assert setup_notion._PARTIAL_BUILD_HINT in err
+
+
+class TestCoursesFlag:
+    def test_courses_flag_needs_the_skill_database(self, monkeypatch, capsys):
+        monkeypatch.setenv("NOTION_TOKEN", "tok")
+        monkeypatch.delenv("NOTION_SKILL_DATABASE_ID", raising=False)
+        assert setup_notion.main([PAGE_ID, "--courses"]) == 1
+        assert "NOTION_SKILL_DATABASE_ID" in capsys.readouterr().err
+
+    def test_courses_flag_prints_the_env_var(self, monkeypatch, capsys):
+        monkeypatch.setenv("NOTION_TOKEN", "tok")
+        monkeypatch.setenv("NOTION_SKILL_DATABASE_ID", "skill-db")
+        monkeypatch.setattr(setup_notion, "build_courses", lambda request, *, page_id, skill_database_id: "course-db")
+        assert setup_notion.main([PAGE_ID, "--courses"]) == 0
+        out = capsys.readouterr().out
+        assert "NOTION_COURSE_DATABASE_ID" in out and "course-db" in out

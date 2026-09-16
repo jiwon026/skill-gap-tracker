@@ -181,25 +181,35 @@ class TestBlocksToReplace:
 
 
 class TestSyncSkills:
-    def test_update_existing_create_new_archive_leftover(self):
+    def test_update_existing_create_new_and_zero_out_leftover(self):
+        """보관하지 않는다. 강의 DB 가 스킬 행과 관계를 맺으므로, 행이 사라지면
+        연결이 끊긴다. 대신 요구 공고 수를 0 으로 둔다."""
         fake = FakeDashboard(rows=[("p1", "powerbi"), ("p2", "spark"), ("p3", "")])
         result = DashboardSync(fake).sync_skills([skill("powerbi"), skill("ab_test", name="A/B 테스트")])
 
-        assert [page for page, _ in fake.updated] == ["p1"]
+        assert [page for page, _ in fake.updated][0] == "p1"
         assert len(fake.created) == 1
-        assert fake.archived == ["p2"]
-        assert (result.created, result.updated, result.archived, result.failed) == (1, 1, 1, 0)
-
-    def test_row_without_key_is_left_alone(self):
-        """사용자가 손으로 추가한 행일 수 있다."""
-        fake = FakeDashboard(rows=[("p3", "")])
-        DashboardSync(fake).sync_skills([])
         assert fake.archived == []
+        zeroed = [props for page, props in fake.updated if page == "p2"]
+        assert zeroed == [{"요구 공고 수": {"number": 0}, "요구 회사": {"multi_select": []}}]
+        assert (result.created, result.updated, result.cleared, result.failed) == (1, 1, 1, 0)
+
+    def test_pages_include_existing_and_new_rows(self):
+        fake = FakeDashboard(rows=[("p1", "powerbi")])
+        result = DashboardSync(fake).sync_skills([skill("powerbi"), skill("ab_test")])
+        assert result.pages == {"powerbi": "p1", "ab_test": "new"}
 
     def test_duplicate_key_is_archived(self):
+        """중복 행만은 보관한다. 같은 스킬이 두 줄이면 어느 줄이 조회될지 모른다."""
         fake = FakeDashboard(rows=[("p1", "powerbi"), ("p9", "powerbi")])
         DashboardSync(fake).sync_skills([skill("powerbi")])
         assert fake.archived == ["p9"]
+
+    def test_row_without_key_is_left_alone(self):
+        fake = FakeDashboard(rows=[("p3", "")])
+        result = DashboardSync(fake).sync_skills([])
+        assert fake.archived == [] and fake.updated == []
+        assert result.cleared == 0
 
     def test_one_failure_does_not_stop_the_rest(self):
         class Flaky(FakeDashboard):
