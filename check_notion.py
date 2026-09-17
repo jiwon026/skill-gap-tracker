@@ -40,6 +40,7 @@ EXPECTED: dict[str, str] = {
     "상태": "select",
     "key": "rich_text",
     "공고 현황": "select",
+    "새 공고": "select",
 }
 
 OK, FAIL, WARN = "  OK  ", "  실패  ", "  경고  "

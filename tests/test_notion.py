@@ -16,7 +16,9 @@ from collect.schema import Posting
 from extract.companies import Company, CompanyBook
 from report.notion import (
     LISTING_STATUSES,
+    NEW,
     NOTION_VERSION,
+    ExistingPage,
     NotionSync,
     build_properties,
     listing_status,
@@ -57,14 +59,19 @@ def make_analyzed(**kw):
 class FakeNotion:
     """호출을 기록만 하는 대역. 네트워크를 타지 않는다."""
 
-    def __init__(self, existing=None):
+    def __init__(self, existing=None, created_at=None):
         self.existing = existing or {}
         self.listing = {}
+        # 기본값은 옛날 행이다. '새 공고' 표시가 저절로 붙지 않게 한다.
+        self.created_at = created_at or {}
         self.created, self.updated, self.queried = [], [], []
 
-    def find_page_id(self, key):
+    def find_page(self, key):
         self.queried.append(key)
-        return self.existing.get(key)
+        page_id = self.existing.get(key)
+        if page_id is None:
+            return None
+        return ExistingPage(page_id=page_id, created_at=self.created_at.get(key, "2020-01-01T00:00:00.000+00:00"))
 
     def create_page(self, properties):
         self.created.append(properties)
@@ -102,6 +109,20 @@ class TestProperties:
     def test_featured_skills_are_empty_when_nothing_is_featured(self):
         """빈 값을 보낸다. 속성을 빼면 어제 고른 막대가 그대로 남는다."""
         assert build_properties(make_analyzed(), SKILL_NAMES)["핵심 부족 스킬"] == {"multi_select": []}
+
+    def test_new_badge_is_a_colored_chip_because_notion_has_no_conditional_format(self):
+        """Notion 은 조건에 따라 행 색을 바꾸지 못한다. 색이 나오는 곳은
+        select 옵션 색뿐이라, 새로 들어온 행에만 값을 넣어 칩으로 띄운다."""
+        assert build_properties(make_analyzed(), SKILL_NAMES, is_new=True)["새 공고"] == {
+            "select": {"name": NEW}
+        }
+
+    def test_new_badge_is_cleared_once_the_posting_is_no_longer_new(self):
+        """빈 값을 보낸다. 속성을 빼면 사흘 전 칩이 그대로 남는다."""
+        assert build_properties(make_analyzed(), SKILL_NAMES)["새 공고"] == {"select": None}
+        assert build_properties(make_analyzed(), SKILL_NAMES, for_update=True)["새 공고"] == {
+            "select": None
+        }
 
     def test_company_uses_whitelist_name_not_raw(self):
         """'쿠팡풀필먼트서비스'가 아니라 '쿠팡'으로 묶여야 집계가 된다."""
@@ -195,7 +216,7 @@ class TestCredentials:
 
 
 class TestHttpClientContract:
-    """`find_page_id`의 조회 속성명과 `build_properties`가 쓰는 속성명은
+    """`find_page`의 조회 속성명과 `build_properties`가 쓰는 속성명은
     같아야 upsert가 성립한다. 갈라지면 매 실행이 모든 공고를 중복 생성하고
     사용자가 편집한 '상태'가 전부 '신규'인 새 행에 묻힌다.
 
@@ -217,7 +238,7 @@ class TestHttpClientContract:
 
     def test_query_filters_on_the_same_property_that_is_written(self):
         client, sent = self._client({"results": []})
-        client.find_page_id("woowahan:R1")
+        client.find_page("woowahan:R1")
 
         _, body = sent[0]
         queried = body["filter"]["property"]
@@ -228,15 +249,20 @@ class TestHttpClientContract:
 
     def test_query_property_type_matches_how_the_value_is_written(self):
         client, sent = self._client({"results": []})
-        client.find_page_id("k")
+        client.find_page("k")
 
         _, body = sent[0]
         written = build_properties(make_analyzed(), SKILL_NAMES)[body["filter"]["property"]]
         assert "rich_text" in written and "rich_text" in body["filter"]
 
-    def test_find_page_id_returns_the_first_result(self):
-        client, _ = self._client({"results": [{"id": "page-9"}]})
-        assert client.find_page_id("k") == "page-9"
+    def test_find_page_returns_the_first_result_with_its_creation_time(self):
+        client, _ = self._client({"results": [{"id": "page-9", "created_time": "2026-09-17T01:00:00.000Z"}]})
+        found = client.find_page("k")
+        assert (found.page_id, found.created_at) == ("page-9", "2026-09-17T01:00:00.000Z")
+
+    def test_find_page_returns_none_when_there_is_no_row(self):
+        client, _ = self._client({"results": []})
+        assert client.find_page("k") is None
 
     def test_create_page_targets_the_configured_database(self):
         client, sent = self._client({"id": "new"})
@@ -550,3 +576,59 @@ class TestNotionRequest:
         """DELETE 가 본문 없이 끝나도 호출부가 json 오류로 죽지 않아야 한다."""
         opener, _ = recording_opener(None)
         assert notion_request("tok", "DELETE", "/blocks/x", opener=opener) == {}
+
+
+class TestNewBadgeWindow:
+    """사흘 안에 들어온 행만 '새 공고' 칩을 단다.
+
+    Notion 이 준 created_time 은 UTC 다. 한국 시간으로 옮겨서 날짜를 본다.
+    새벽에 만들어진 행이 하루 어긋나면 칩이 하루 일찍 사라진다.
+    """
+
+    def test_a_row_created_today_keeps_the_badge(self):
+        sync = NotionSync(client=FakeNotion(
+            existing={"woowahan:R2609008": "p1"},
+            created_at={"woowahan:R2609008": "2026-09-17T01:00:00.000+00:00"},  # KST 10:00
+        ))
+        sync.push([make_analyzed()], SKILL_NAMES, new_since="2026-09-15")
+        assert sync.client.updated[0][1]["새 공고"] == {"select": {"name": NEW}}
+
+    def test_a_row_older_than_the_window_loses_the_badge(self):
+        sync = NotionSync(client=FakeNotion(
+            existing={"woowahan:R2609008": "p1"},
+            created_at={"woowahan:R2609008": "2026-09-14T05:00:00.000+00:00"},
+        ))
+        sync.push([make_analyzed()], SKILL_NAMES, new_since="2026-09-15")
+        assert sync.client.updated[0][1]["새 공고"] == {"select": None}
+
+    def test_utc_evening_counts_as_the_next_korean_day(self):
+        """UTC 9/14 16:00 은 KST 9/15 01:00 이다. 창 안이어야 한다."""
+        sync = NotionSync(client=FakeNotion(
+            existing={"woowahan:R2609008": "p1"},
+            created_at={"woowahan:R2609008": "2026-09-14T16:00:00.000+00:00"},
+        ))
+        sync.push([make_analyzed()], SKILL_NAMES, new_since="2026-09-15")
+        assert sync.client.updated[0][1]["새 공고"] == {"select": {"name": NEW}}
+
+    def test_a_brand_new_row_is_always_badged(self):
+        sync = NotionSync(client=FakeNotion())
+        sync.push([make_analyzed()], SKILL_NAMES, new_since="2026-09-15")
+        assert sync.client.created[0]["새 공고"] == {"select": {"name": NEW}}
+
+    def test_without_a_window_nothing_existing_is_badged(self):
+        """new_since 를 안 주면 기존 행은 건드리지 않는다(칩을 지운다)."""
+        sync = NotionSync(client=FakeNotion(
+            existing={"woowahan:R2609008": "p1"},
+            created_at={"woowahan:R2609008": "2026-09-17T01:00:00.000+00:00"},
+        ))
+        sync.push([make_analyzed()], SKILL_NAMES)
+        assert sync.client.updated[0][1]["새 공고"] == {"select": None}
+
+    def test_an_unreadable_creation_time_does_not_crash_the_push(self):
+        sync = NotionSync(client=FakeNotion(
+            existing={"woowahan:R2609008": "p1"},
+            created_at={"woowahan:R2609008": ""},
+        ))
+        result = sync.push([make_analyzed()], SKILL_NAMES, new_since="2026-09-15")
+        assert result.failed == 0
+        assert sync.client.updated[0][1]["새 공고"] == {"select": None}

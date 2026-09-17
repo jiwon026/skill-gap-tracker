@@ -40,15 +40,17 @@ from report.dashboard_layout import (
 
 JOB_PROPS = {name: f"id-{i}" for i, name in enumerate(
     ["공고명", "회사", "규모", "우선순위", "지역", "마감", "보유 스킬", "부족 스킬",
-     "핵심 부족 스킬", "어필 경험", "어필 포인트", "URL", "상태", "key", "공고 현황"])}
+     "핵심 부족 스킬", "어필 경험", "어필 포인트", "URL", "상태", "key", "공고 현황",
+     "새 공고"])}
 SKILL_PROPS = {name: f"s-{i}" for i, name in enumerate(SKILL_DB_PROPERTIES)}
 
 
 def test_visible_columns_keep_order_then_hide_the_rest():
     columns = visible_columns(JOB_PROPS, JOB_COLUMNS)
-    assert [c["property_id"] for c in columns[:5]] == [JOB_PROPS[n] for n in JOB_COLUMNS]
-    assert all(c["visible"] for c in columns[:5])
-    assert len(columns) == len(JOB_PROPS) and not any(c["visible"] for c in columns[5:])
+    shown = len(JOB_COLUMNS)
+    assert [c["property_id"] for c in columns[:shown]] == [JOB_PROPS[n] for n in JOB_COLUMNS]
+    assert all(c["visible"] for c in columns[:shown])
+    assert len(columns) == len(JOB_PROPS) and not any(c["visible"] for c in columns[shown:])
 
 
 def test_visible_columns_reject_unknown_names():
@@ -65,6 +67,8 @@ def test_jobs_view_shows_open_postings_under_the_heading():
     }
     assert body["filter"] == {"property": "공고 현황", "select": {"equals": "모집중"}}
     assert body["sorts"] == [{"property": "우선순위", "direction": "ascending"}]
+    # 새 공고 칩은 왼쪽에 둔다. 표가 단 하나를 쓰고 있어 오른쪽 열은 잘린다.
+    assert JOB_COLUMNS[1] == "새 공고"
 
 
 def test_skill_chart_counts_missing_skills_of_open_postings_only():

@@ -468,7 +468,7 @@ class TestPublish:
         from report.notion import RetireResult, SyncResult
 
         class FakeSync:
-            def push(self, rows, names, *, featured_skills=()):
+            def push(self, rows, names, *, featured_skills=(), new_since=None):
                 return SyncResult(created=3, updated=0, failed=0)
 
             def retire(self, *, active, collected, complete_sources):

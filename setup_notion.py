@@ -30,7 +30,7 @@ from analyze.priority import PRIORITIES
 from check_notion import EXPECTED
 from extract.company_size import SIZES, UNKNOWN
 from report.dashboard_layout import VIEWS_API_VERSION, build_courses, build_dashboard
-from report.notion import API_ROOT, INITIAL_STATUS, LISTING_STATUSES, NOTION_VERSION, TIMEOUT_SEC, notion_request
+from report.notion import NEW, API_ROOT, INITIAL_STATUS, LISTING_STATUSES, NOTION_VERSION, TIMEOUT_SEC, notion_request
 
 DEFAULT_TITLE = "지원 보드"
 
@@ -46,6 +46,7 @@ SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "규모": tuple(zip((*SIZES, UNKNOWN), ("red", "orange", "green", "blue", "gray"))),
     "공고 현황": tuple(zip(LISTING_STATUSES, ("green", "orange", "gray"))),
     "상태": ((INITIAL_STATUS, "green"), ("검토", "yellow"), ("지원", "blue")),
+    "새 공고": ((NEW, "green"),),
 }
 
 _HEX_ID = re.compile(r"([0-9a-f]{8})-?([0-9a-f]{4})-?([0-9a-f]{4})-?([0-9a-f]{4})-?([0-9a-f]{12})", re.I)
