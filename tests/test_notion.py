@@ -326,25 +326,25 @@ class TestListingStatus:
     """
 
     KW = dict(
-        active={"greenhouse:1"},
-        collected={"greenhouse:1", "greenhouse:2"},
-        complete_sources=frozenset({"greenhouse"}),
+        active={"woowahan:1"},
+        collected={"woowahan:1", "woowahan:2"},
+        complete_sources=frozenset({"woowahan"}),
     )
 
     def test_in_todays_results_is_open(self):
-        assert listing_status("greenhouse:1", **self.KW) == "모집중"
+        assert listing_status("woowahan:1", **self.KW) == "모집중"
 
     def test_collected_but_filtered_out_is_excluded(self):
         """이번 경력 필터 수정으로 빠진 7건이 이 경우다."""
-        assert listing_status("greenhouse:2", **self.KW) == "제외됨"
+        assert listing_status("woowahan:2", **self.KW) == "제외됨"
 
     def test_missing_from_a_complete_source_is_closed(self):
-        assert listing_status("greenhouse:9", **self.KW) == "마감"
+        assert listing_status("woowahan:9", **self.KW) == "마감"
 
     def test_missing_from_an_incomplete_source_is_left_alone(self):
         """수집이 실패한 날 공고가 전부 마감으로 찍히면 안 된다."""
         kw = {**self.KW, "complete_sources": frozenset()}
-        assert listing_status("greenhouse:9", **kw) is None
+        assert listing_status("woowahan:9", **kw) is None
 
     def test_search_sources_are_never_judged_closed(self):
         """사람인은 키워드 검색이라 목록에 없다고 마감이 아니다."""
@@ -379,29 +379,29 @@ class TestRetire:
         return client
 
     def _retire(self, client, **kw):
-        base = dict(active=set(), collected=set(), complete_sources=frozenset({"greenhouse"}))
+        base = dict(active=set(), collected=set(), complete_sources=frozenset({"woowahan"}))
         return NotionSync(client).retire(**{**base, **kw})
 
     def test_filtered_row_is_marked_excluded(self):
-        client = self._client({"greenhouse:2": ("p2", "모집중")})
-        result = self._retire(client, collected={"greenhouse:2"})
+        client = self._client({"woowahan:2": ("p2", "모집중")})
+        result = self._retire(client, collected={"woowahan:2"})
         assert client.updated == [("p2", {"공고 현황": {"select": {"name": "제외됨"}}})]
         assert result.excluded == 1
 
     def test_vanished_row_is_marked_closed(self):
-        client = self._client({"greenhouse:9": ("p9", "모집중")})
+        client = self._client({"woowahan:9": ("p9", "모집중")})
         result = self._retire(client)
         assert client.updated == [("p9", {"공고 현황": {"select": {"name": "마감"}}})]
         assert result.closed == 1
 
     def test_active_rows_are_not_touched(self):
         """push 가 이미 모집중으로 썼다. 다시 쓰면 요청만 늘어난다."""
-        client = self._client({"greenhouse:1": ("p1", "모집중")})
-        self._retire(client, active={"greenhouse:1"}, collected={"greenhouse:1"})
+        client = self._client({"woowahan:1": ("p1", "모집중")})
+        self._retire(client, active={"woowahan:1"}, collected={"woowahan:1"})
         assert client.updated == []
 
     def test_unchanged_status_is_not_rewritten(self):
-        client = self._client({"greenhouse:9": ("p9", "마감")})
+        client = self._client({"woowahan:9": ("p9", "마감")})
         result = self._retire(client)
         assert client.updated == []
         assert result.unchanged == 1
@@ -414,7 +414,7 @@ class TestRetire:
 
     def test_retire_never_writes_user_status(self):
         """'상태'는 사용자의 것이다. 공고가 마감돼도 '지원함'은 남아야 한다."""
-        client = self._client({"greenhouse:9": ("p9", "모집중")})
+        client = self._client({"woowahan:9": ("p9", "모집중")})
         self._retire(client)
         assert all("상태" not in props for _, props in client.updated)
 
@@ -431,10 +431,10 @@ class TestRetire:
                     raise OSError("Notion 5xx")
                 super().update_page(page_id, properties)
 
-        client = Flaky(existing={"greenhouse:8": "bad", "greenhouse:9": "p9"})
-        client.listing = {"greenhouse:8": "모집중", "greenhouse:9": "모집중"}
+        client = Flaky(existing={"woowahan:8": "bad", "woowahan:9": "p9"})
+        client.listing = {"woowahan:8": "모집중", "woowahan:9": "모집중"}
         result = NotionSync(client).retire(
-            active=set(), collected=set(), complete_sources=frozenset({"greenhouse"})
+            active=set(), collected=set(), complete_sources=frozenset({"woowahan"})
         )
         assert result.closed == 1 and result.failed == 1
 
@@ -446,8 +446,8 @@ class TestIterRowsContract:
         from report.notion import HttpNotionClient
 
         pages = [
-            {"results": [_row("p1", "greenhouse:1", "모집중")], "has_more": True, "next_cursor": "c2"},
-            {"results": [_row("p2", "greenhouse:2", None)], "has_more": False},
+            {"results": [_row("p1", "woowahan:1", "모집중")], "has_more": True, "next_cursor": "c2"},
+            {"results": [_row("p2", "woowahan:2", None)], "has_more": False},
         ]
         sent = []
 
@@ -457,7 +457,7 @@ class TestIterRowsContract:
             return type("R", (), {"read": lambda self: _json.dumps(body).encode()})()
 
         rows = list(HttpNotionClient("t", "db", opener=opener).iter_rows())
-        assert rows == [("p1", "greenhouse:1", "모집중"), ("p2", "greenhouse:2", None)]
+        assert rows == [("p1", "woowahan:1", "모집중"), ("p2", "woowahan:2", None)]
         assert sent[1]["start_cursor"] == "c2"
 
 

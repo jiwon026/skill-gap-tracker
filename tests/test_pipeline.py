@@ -22,7 +22,7 @@ FETCHED = "2026-09-09T00:00:00+09:00"
 BOILER = "<p>우리 회사는 고객 감동을 실현하기 위해 존재하는 회사입니다</p>"
 
 
-def posting(source_id, title, body, company="테스트커머스", source="greenhouse", company_id=None):
+def posting(source_id, title, body, company="테스트커머스", source="woowahan", company_id=None):
     return Posting(
         source=source,
         source_id=source_id,
@@ -119,7 +119,7 @@ class TestFiltering:
 
 
     def test_required_years_in_the_body_exclude_a_plain_title(self):
-        """Greenhouse 는 경력을 숫자로 안 준다. 제목이 평범해도 본문
+        """숫자를 안 주는 소스가 있다. 제목이 평범해도 본문
         자격요건이 '5년 이상'이면 신입 대상이 아니다(쿠팡 7건 전부가 이 경우였다)."""
         experienced = posting(
             "1", "[Coupang] Business Analyst",
@@ -161,7 +161,7 @@ class TestDedupe:
         rows = run._dedupe(
             [
                 posting("1", "데이터 분석가", "<p>SQL</p>", source="saramin"),
-                posting("1", "데이터 분석가", "<p>SQL</p>", source="greenhouse"),
+                posting("1", "데이터 분석가", "<p>SQL</p>", source="woowahan"),
             ]
         )
         assert len(rows) == 2
@@ -191,26 +191,36 @@ class TestCompleteSources:
     틀리면 수집이 실패한 날 멀쩡한 공고가 전부 마감으로 찍힌다.
     """
 
+    #: 보드를 여러 개 가진 완전 소스를 흉내 낸다. 실제 소스 목록이 바뀌어도
+    #: 이 클래스가 검사하는 판정 규칙은 그대로여야 한다.
+    EXHAUSTIVE = frozenset({"boards", "woowahan"})
+
     def test_all_boards_fetched_and_non_empty_is_complete(self):
-        outcomes = [("greenhouse", True, 370), ("greenhouse", True, 44)]
-        assert run._complete_sources(outcomes) == frozenset({"greenhouse"})
+        outcomes = [("boards", True, 370), ("boards", True, 44)]
+        assert run._complete_sources(outcomes, self.EXHAUSTIVE) == frozenset({"boards"})
 
     def test_one_failed_board_makes_the_source_incomplete(self):
-        outcomes = [("greenhouse", True, 370), ("greenhouse", False, 0)]
-        assert run._complete_sources(outcomes) == frozenset()
+        outcomes = [("boards", True, 370), ("boards", False, 0)]
+        assert run._complete_sources(outcomes, self.EXHAUSTIVE) == frozenset()
 
     def test_an_empty_board_is_treated_as_an_outage(self):
         """200 에 빈 목록이 오는 날도 있다. 그걸 '전부 마감'으로 읽으면 안 된다."""
-        outcomes = [("greenhouse", True, 370), ("greenhouse", True, 0)]
-        assert run._complete_sources(outcomes) == frozenset()
+        outcomes = [("boards", True, 370), ("boards", True, 0)]
+        assert run._complete_sources(outcomes, self.EXHAUSTIVE) == frozenset()
 
     def test_search_sources_are_never_complete(self):
         """사람인은 키워드 검색 + 페이지 상한이라 목록이 전체가 아니다."""
-        assert run._complete_sources([("saramin", True, 500)]) == frozenset()
+        assert run._complete_sources([("saramin", True, 500)], self.EXHAUSTIVE) == frozenset()
 
     def test_sources_are_judged_independently(self):
-        outcomes = [("greenhouse", False, 0), ("woowahan", True, 54)]
-        assert run._complete_sources(outcomes) == frozenset({"woowahan"})
+        outcomes = [("boards", False, 0), ("woowahan", True, 54)]
+        assert run._complete_sources(outcomes, self.EXHAUSTIVE) == frozenset({"woowahan"})
+
+    def test_the_default_set_is_woowahan_only(self):
+        """기본값은 저장소에 남은 완전 소스다. 개인용 수집기는 EXHAUSTIVE 로
+        스스로 밝히므로 여기 없다."""
+        assert run.EXHAUSTIVE_SOURCES == frozenset({"woowahan"})
+        assert run._complete_sources([("woowahan", True, 54)]) == frozenset({"woowahan"})
 
 
 class TestRegion:

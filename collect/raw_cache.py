@@ -23,8 +23,8 @@ SUFFIX = ".gz"
 def _cache_date(path: Path) -> date | None:
     """파일 이름 끝에 붙은 날짜. 캐시 이름이 아니면 None 이다.
 
-    소스 이름 자체에 하이픈이 들어간다(greenhouse-coupang). 하이픈으로 나누면
-    개수가 소스마다 달라지므로, 날짜 길이만큼 뒤에서 잘라 본다.
+    소스 이름에 하이픈이 들어갈 수 있어 하이픈으로 나누면 조각 수가 소스마다
+    달라진다. 그래서 날짜 길이만큼 뒤에서 잘라 본다.
     """
     try:
         return date.fromisoformat(path.stem[-10:])

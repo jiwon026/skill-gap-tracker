@@ -24,7 +24,7 @@ def analyzed(projects=0, activities=0, *, company=TARGET):
     experiences = tuple(_match("project", i) for i in range(projects))
     experiences += tuple(_match("activity", i) for i in range(activities))
     posting = Posting(
-        source="greenhouse", source_id="1", company="쿠팡", title="데이터 분석가",
+        source="woowahan", source_id="1", company="쿠팡", title="데이터 분석가",
         location="Seoul", url="https://example.com/1", body_html="",
         posted_at=None, fetched_at="2026-09-10T00:00:00+09:00",
     )

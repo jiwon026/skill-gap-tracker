@@ -47,7 +47,6 @@ Notion에는 공고마다 이런 행이 생긴다.
 |---|---|
 | 우아한형제들 채용 API | 목록 + 공고별 상세 |
 | 사람인 오픈 API | `SARAMIN_ACCESS_KEY` 필요. 본문을 주지 않아 본문 대신 키워드·직무코드를 쓴다 |
-| Greenhouse Job Board API | 코드는 있으나 현재 `sources.yaml`에서 꺼 두었다 |
 
 그 밖의 개인용 수집기는 `collect/local/`에 두면 `run.py`가 자동으로 붙인다. 이 폴더는 저장소에 포함하지 않는다.
 

@@ -24,7 +24,7 @@ BOOK = ExperienceBook.from_config({"experiences": [{
 
 def analyzed(source_id, company, matched=(), missing=()):
     posting = Posting(
-        source="greenhouse", source_id=source_id, company=company, title="데이터 분석가",
+        source="woowahan", source_id=source_id, company=company, title="데이터 분석가",
         location="서울", url=f"https://example.com/{source_id}", body_html="<p>본문</p>",
         posted_at=None, fetched_at="2026-09-15T00:00:00+09:00",
     )

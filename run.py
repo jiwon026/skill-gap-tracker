@@ -29,7 +29,7 @@ from analyze.gap import AnalyzedPosting, compute_gap
 from analyze.priority import assign_priority, priority_rank
 from analyze.recommend import Recommendation, recommend, search_terms, target_skills
 from analyze.skill_board import SkillRow, build_skill_rows
-from collect import greenhouse, saramin, woowahan
+from collect import saramin, woowahan
 from collect.raw_cache import compress_old
 from collect.training import REQUEST_INTERVAL_SEC, fetch_own_fee, prune_cache, search_courses, with_own_fee
 from report.course_notion import CourseSync
@@ -124,7 +124,7 @@ def _raw_cache(name: str, run_date: str) -> Path:
 #: 크지만, 공고가 그 상한을 넘으면 뒷장 공고가 마감으로 찍히므로 다시 볼 것.
 #: 개인용 수집기는 EXHAUSTIVE 로 스스로 밝히고, 목록을 끝까지 못 본 날은
 #: complete=False 를 줘서 그날 실패로 기록된다.
-EXHAUSTIVE_SOURCES = frozenset({"greenhouse", "woowahan"})
+EXHAUSTIVE_SOURCES = frozenset({"woowahan"})
 
 
 def _exhaustive(local_modules: Iterable[ModuleType]) -> frozenset[str]:
@@ -158,19 +158,6 @@ def collect(run_date: str, fetched_at: str) -> tuple[tuple[Posting, ...], frozen
     sources = _config("sources.yaml")
     collected: list[Posting] = []
     outcomes: list[tuple[str, bool, int]] = []
-
-    for entry in _enabled(sources.get("greenhouse", ())):
-        spec = greenhouse.BoardSpec(**entry)
-        try:
-            payload = greenhouse.fetch_payload(spec, _raw_cache(f"greenhouse-{spec.token}", run_date))
-        except OSError as exc:
-            print(f"  ! {spec.token}: 수집 실패, 건너뜁니다 — {exc}", file=sys.stderr)
-            outcomes.append(("greenhouse", False, 0))
-            continue
-        result = greenhouse.parse_board(payload, spec, fetched_at=fetched_at)
-        outcomes.append(("greenhouse", True, len(result.postings) + len(result.skipped)))
-        collected.extend(result.postings)
-        _report_source(spec.company, result)
 
     for entry in _enabled(sources.get("woowahan", ())):
         spec = woowahan.BoardSpec(**entry)
@@ -298,7 +285,7 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
         if not in_region(posting.title, posting.location, region):
             skipped_region += 1
             continue
-        # 경력을 숫자로 주지 않는 소스(Greenhouse)는 본문 자격요건에서 읽는다.
+        # 경력을 숫자로 주지 않는 소스는 본문 자격요건에서 읽는다.
         stated = (
             years_from_requirements(segments_by_key[posting.key])
             if posting.experience_min is None

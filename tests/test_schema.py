@@ -13,12 +13,12 @@ from collect.schema import Posting
 
 def _valid(**overrides):
     base = dict(
-        source="greenhouse",
+        source="woowahan",
         source_id="4123456",
         company="쿠팡",
         title="Business Analyst, Retail",
         location="Seoul, Korea",
-        url="https://boards.greenhouse.io/coupang/jobs/4123456",
+        url="https://career.woowahan.com/recruitment/R2400123/detail",
         body_html="<p>SQL, Python</p>",
         posted_at="2026-09-01T00:00:00Z",
         fetched_at="2026-09-09T00:00:00Z",
@@ -35,10 +35,10 @@ def test_is_frozen():
 
 def test_key_is_source_scoped():
     """소스가 다르면 같은 id라도 다른 공고다."""
-    a = _valid(source="greenhouse", source_id="1")
+    a = _valid(source="woowahan", source_id="1")
     b = _valid(source="worknet", source_id="1")
     assert a.key != b.key
-    assert a.key == "greenhouse:1"
+    assert a.key == "woowahan:1"
 
 
 @pytest.mark.parametrize("field", ["source", "source_id", "title", "url"])

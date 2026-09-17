@@ -42,7 +42,7 @@ class Posting:
     fetched_at: str
     departments: tuple[str, ...] = field(default=())
     #: 소스가 준 최소 요구 경력(년). None 은 '그 소스가 숫자를 주지 않는다'는
-    #: 뜻이지 '경력이 필요 없다'는 뜻이 아니다. Greenhouse 가 그렇다.
+    #: 뜻이지 '경력이 필요 없다'는 뜻이 아니다.
     #: 기본값이 있으므로 이 필드가 없는 과거 스냅샷도 그대로 읽힌다.
     experience_min: int | None = None
     #: 지원 마감일(ISO 날짜). 소스가 날짜를 줄 때만 있다.

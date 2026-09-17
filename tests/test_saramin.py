@@ -162,7 +162,7 @@ class TestMalformedResponses:
     """공고 한 건의 결함이 파이프라인 전체를 죽이면 안 된다.
 
     `run.py`는 `parse_search`를 try 밖에서 부르므로, 여기서 예외가 나가면
-    greenhouse·우아한형제들 결과까지 함께 날아간다.
+    다른 소스 결과까지 함께 날아간다.
     """
 
     @pytest.mark.parametrize("active", [None, "", "null", [], {}])

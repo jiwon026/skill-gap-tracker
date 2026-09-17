@@ -4,8 +4,8 @@
 15건이 Senior·Staff·Principal·Director였다.
 
 판정 재료가 소스마다 다르다. 우아한형제들(`careerRestrictionMinYears`)과
-사람인(`experience-level.min`)은 최소 요구 경력을 숫자로 주지만,
-Greenhouse는 주지 않는다. 그래서 믿을 만한 순서대로 본다.
+사람인(`experience-level.min`)은 최소 요구 경력을 숫자로 주지만, 아예
+주지 않는 소스도 있다. 그래서 믿을 만한 순서대로 본다.
 
     소스가 준 숫자 > 제목의 신입 표기 > 본문 자격요건의 연수 > 제목의 직급 표기
 
