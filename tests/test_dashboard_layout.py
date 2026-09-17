@@ -16,6 +16,7 @@ from report.course_notion import (
 from report.dashboard import MISSING, OWNED, SKILL_DB_PROPERTIES, SUMMARY_HEADING
 from report.dashboard_layout import (
     CHART_HEADING,
+    CHART_HEIGHT,
     CHART_PROPERTY,
     COURSE_COLUMNS,
     COURSE_PAGE,
@@ -80,6 +81,9 @@ def test_skill_chart_counts_missing_skills_of_open_postings_only():
     assert {"property": CHART_PROPERTY, "multi_select": {"is_not_empty": True}} in body["filter"]["and"]
     # 지금 아무 공고도 요구하지 않는 선택지가 0짜리 막대로 남지 않게 한다(2026-09-16 확인).
     assert conf["hide_empty_groups"] is True
+    # 차트가 세로로 길면 아래의 '들어볼 만한 강의' 가 첫 화면에서 밀려난다.
+    # height 는 small, medium, large, extra_large 만 받는다(2026-09-17 확인).
+    assert conf["height"] == CHART_HEIGHT == "small"
 
 
 def test_skill_database_has_the_synced_columns():

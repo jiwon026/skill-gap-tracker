@@ -53,6 +53,10 @@ COURSE_SUMMARY_COLUMNS = ("스킬", "과정명", "기간", "수업 방식")
 #: Notion 차트는 막대를 상위 N 개로 자르지 못한다(2026-09-17 확인).
 CHART_PROPERTY = "핵심 부족 스킬"
 
+#: 차트 높이. small, medium, large, extra_large 만 받는다(2026-09-17 확인).
+#: 차트가 세로로 길면 바로 아래 '들어볼 만한 강의' 가 첫 화면 밖으로 밀린다.
+CHART_HEIGHT = "small"
+
 #: (method, path, body) 를 받아 응답 JSON 을 주는 호출. 테스트는 대역을 넣는다.
 Request = Callable[..., Mapping[str, Any]]
 
@@ -133,6 +137,7 @@ def skill_chart_payload(data_source_id: str, property_ids: Mapping[str, str], *,
             # 선택지는 한 번 쓰이면 DB 에 남는다. 이게 없으면 어제까지 상위였던
             # 스킬이 0짜리 막대로 계속 쌓인다(31개 중 5개만 값이 있었다).
             "hide_empty_groups": True,
+            "height": CHART_HEIGHT,
         },
     }
 
