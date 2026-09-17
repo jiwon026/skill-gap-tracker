@@ -42,6 +42,11 @@ JOBS_LINK_TEXT = "공고 전체 보기"
 COURSE_PAGE = "추천 강의"
 COURSE_COLUMNS = ("과정명", "스킬", "연결", "수업 방식", "기간", "본인부담액", "상태")
 
+#: 첫 화면에 두는 요약 표. 어떤 역량을 무슨 과정으로, 언제, 어떤 성격으로
+#: 채우는지만 본다. 비용과 신청 상태는 하위 페이지에서 본다.
+COURSE_SUMMARY_HEADING = "들어볼 만한 강의"
+COURSE_SUMMARY_COLUMNS = ("스킬", "과정명", "기간", "연결")
+
 #: (method, path, body) 를 받아 응답 JSON 을 주는 호출. 테스트는 대역을 넣는다.
 Request = Callable[..., Mapping[str, Any]]
 
@@ -171,7 +176,12 @@ def _property_ids(data_source: Mapping[str, Any]) -> dict[str, str]:
 
 
 def _append(request: Request, page_id: str, children: Sequence[Mapping[str, Any]]) -> list[str]:
-    """페이지 끝에 블록을 붙이고 새 블록 id 들을 돌려준다."""
+    """페이지 끝에 블록을 붙이고 새 블록 id 들을 돌려준다.
+
+    중간에 끼워 넣는 after 는 쓰지 않는다. Views API 버전이 400 을 준다
+    (body.after should be not present, 2026-09-17 확인). 순서가 필요하면
+    만드는 차례를 바꾼다.
+    """
     payload = request("PATCH", f"/blocks/{page_id}/children", {"children": list(children)})
     return [block["id"] for block in (payload.get("results") or ())][-len(children):]
 
@@ -232,10 +242,40 @@ def course_view_patch(property_ids: Mapping[str, str]) -> dict[str, Any]:
     }
 
 
-def build_courses(request: Request, *, page_id: str, skill_database_id: str) -> str:
+def course_summary_view_payload(
+    data_source_id: str,
+    property_ids: Mapping[str, str],
+    *,
+    page_id: str,
+    after_block: str,
+) -> dict[str, Any]:
+    """첫 화면용 강의 표. 추천 중인 것만, 네 열만 보여 준다."""
+    return {
+        "data_source_id": data_source_id,
+        "name": COURSE_SUMMARY_HEADING,
+        "type": "table",
+        "create_database": _linked(page_id, after_block),
+        "filter": {"property": "추천 현황", "select": {"equals": OPEN_RECOMMENDATION}},
+        # 직접 배우는 과정을 먼저, 그 안에서는 빨리 시작하는 것을 먼저 본다.
+        "sorts": [{"property": "연결", "direction": "ascending"},
+                  {"property": "기간", "direction": "ascending"}],
+        "configuration": {"type": "table",
+                          "properties": visible_columns(property_ids, COURSE_SUMMARY_COLUMNS)},
+    }
+
+
+def build_courses(
+    request: Request,
+    *,
+    page_id: str,
+    skill_database_id: str,
+    summary_after_block: str | None = None,
+) -> str:
     """이미 있는 대시보드에 추천 강의 페이지와 강의 DB 를 더한다.
 
     이미 만들어진 대시보드에도 붙일 수 있어야 해서 build_dashboard 와 나눠 둔다.
+    summary_after_block 을 주면 그 블록 뒤에 첫 화면용 요약 표도 만든다.
+    제목 블록은 부르는 쪽이 미리 만들어 둔다(여기서는 끼워 넣을 수 없다).
     """
     skill_db = request("GET", f"/databases/{skill_database_id}", None)
     skill_ds = skill_db["data_sources"][0]["id"]
@@ -246,6 +286,10 @@ def build_courses(request: Request, *, page_id: str, skill_database_id: str) -> 
     course_props = _property_ids(request("GET", f"/data_sources/{course_ds}", None))
     default_view = request("GET", f"/views?database_id={course_db['id']}", None)["results"][0]["id"]
     request("PATCH", f"/views/{default_view}", course_view_patch(course_props))
+
+    if summary_after_block:
+        request("POST", "/views", course_summary_view_payload(
+            course_ds, course_props, page_id=page_id, after_block=summary_after_block))
     return course_db["id"]
 
 
@@ -273,6 +317,10 @@ def build_dashboard(request: Request, *, page_id: str, jobs_database_id: str) ->
     chart_heading = _append(request, page_id, [heading(CHART_HEADING)])[-1]
     request("POST", "/views", skill_chart_payload(jobs_ds, jobs_props, page_id=page_id, after_block=chart_heading))
 
+    # 강의 표 자리를 차트 바로 뒤에 미리 잡아 둔다. 표 자체는 강의 DB 가 생긴
+    # 뒤에야 만들 수 있고, 블록은 중간에 끼워 넣을 수 없어서 순서로 해결한다.
+    course_heading = _append(request, page_id, [heading(COURSE_SUMMARY_HEADING)])[-1]
+
     _append(request, page_id, [heading(DETAIL_HEADING)])
     owned_page = _child_page(request, page_id, OWNED_PAGE)
     gap_page = _child_page(request, page_id, GAP_PAGE)
@@ -287,5 +335,6 @@ def build_dashboard(request: Request, *, page_id: str, jobs_database_id: str) ->
     request("PATCH", f"/views/{default_view}", owned_view_patch(skill_props))
     request("POST", "/views", gap_view_payload(skill_ds, skill_props, page_id=gap_page))
 
-    course_db = build_courses(request, page_id=page_id, skill_database_id=skill_db["id"])
+    course_db = build_courses(request, page_id=page_id, skill_database_id=skill_db["id"],
+                              summary_after_block=course_heading)
     return DashboardIds(page_id=page_id, skill_database_id=skill_db["id"], course_database_id=course_db)

@@ -120,8 +120,9 @@ powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 07:30
 ### 대시보드 (선택)
 
 공고 DB 는 열이 14개라 한눈에 보기 어렵습니다. 대시보드를 만들면 첫 화면에서
-요약 숫자, 모집중 공고(열 5개), 부족 스킬 차트를 보고, 자세한 내용은 하위
-페이지(나의 스킬, 역량 갭, 공고 전체)에서 봅니다.
+요약 숫자, 모집중 공고(열 5개), 부족 스킬 차트, 들어볼 만한 강의(스킬, 과정명,
+기간, 연결)를 보고, 자세한 내용은 하위 페이지(나의 스킬, 역량 갭, 공고 전체,
+추천 강의)에서 봅니다.
 
 1. Notion 에 빈 페이지를 만들고 인테그레이션을 연결합니다.
 2. 공고 DB 의 `NOTION_DATABASE_ID` 가 들어 있는 상태에서 실행합니다.
@@ -156,6 +157,9 @@ powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 07:30
 
 3. 출력된 `NOTION_COURSE_DATABASE_ID` 를 환경변수로 넣습니다.
 
+- `--courses` 는 하위 페이지와 강의 DB 만 만듭니다. 첫 화면의 강의 표는 만들지
+  않습니다. 블록을 페이지 중간에 끼워 넣을 수 없어서, 자리를 미리 잡아 두는
+  `--dashboard` 에서만 만듭니다.
 - 검색어는 `config/skills.yaml` 의 `training` 에 적습니다. `direct` 는 그 도구를 직접
   다루는 과정, `foundation` 은 기반 역량 과정입니다. 도구 이름이 과정명에 없는 스킬이
   많아서 둘을 나눠 두고, 강의 DB 의 '연결' 열에 그대로 표시합니다.

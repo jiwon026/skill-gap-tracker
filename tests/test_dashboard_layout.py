@@ -9,14 +9,19 @@ from analyze.recommend import DIRECT, FOUNDATION
 from report.course_notion import COURSE_DB_PROPERTIES, COURSE_STATUSES, LISTINGS, OPEN_RECOMMENDATION
 from report.dashboard import MISSING, OWNED, SKILL_DB_PROPERTIES, SUMMARY_HEADING
 from report.dashboard_layout import (
+    CHART_HEADING,
     COURSE_COLUMNS,
     COURSE_PAGE,
+    COURSE_SUMMARY_COLUMNS,
+    COURSE_SUMMARY_HEADING,
+    DETAIL_HEADING,
     GAP_COLUMNS,
     JOB_COLUMNS,
     OWNED_COLUMNS,
     build_courses,
     build_dashboard,
     course_database_payload,
+    course_summary_view_payload,
     course_view_patch,
     gap_view_payload,
     jobs_view_payload,
@@ -131,7 +136,8 @@ def test_build_dashboard_creates_everything_in_order():
     assert first_append["children"][0]["heading_2"]["rich_text"][0]["text"]["content"] == SUMMARY_HEADING
 
     views = [body for m, p, body in notion.calls if m == "POST" and p == "/views"]
-    assert [v["name"] for v in views] == ["지금 볼 공고", "채우면 좋은 스킬", "부족 스킬"]
+    assert [v["name"] for v in views] == [
+        "지금 볼 공고", "채우면 좋은 스킬", "부족 스킬", COURSE_SUMMARY_HEADING]
     assert views[0]["create_database"]["position"]["block_id"] == "b3"  # '지금 볼 공고' 제목 뒤
     assert ("PATCH", "/views/default-view") in [(m, p) for m, p, _ in notion.calls]
     pages = [body["properties"]["title"]["title"][0]["text"]["content"]
@@ -208,3 +214,74 @@ def test_build_courses_adds_a_page_and_database_to_an_existing_dashboard():
     # 대시보드 페이지에는 제목만 더한다. 기존 블록은 건드리지 않는다.
     appended = [b for m, p, body in notion.calls if p == "/blocks/dash/children" for b in body["children"]]
     assert all(b["type"] == "heading_2" for b in appended) or appended == []
+
+
+def test_course_summary_view_shows_only_the_four_summary_columns():
+    """첫 화면 표는 역량, 과정명, 기간, 유형만 보여 준다. 나머지는 하위 페이지에서 본다."""
+    props = {name: f"c-{i}" for i, name in enumerate(COURSE_DB_PROPERTIES)}
+    body = course_summary_view_payload("course-ds", props, page_id="dash", after_block="h")
+
+    assert body["type"] == "table"
+    assert body["name"] == COURSE_SUMMARY_HEADING
+    assert body["create_database"] == {
+        "parent": {"type": "page_id", "page_id": "dash"},
+        "position": {"type": "after_block", "block_id": "h"},
+    }
+    assert body["filter"] == {"property": "추천 현황", "select": {"equals": OPEN_RECOMMENDATION}}
+    shown = [c["property_id"] for c in body["configuration"]["properties"] if c["visible"]]
+    assert shown == [props[n] for n in COURSE_SUMMARY_COLUMNS]
+    assert COURSE_SUMMARY_COLUMNS == ("스킬", "과정명", "기간", "연결")
+
+
+def test_course_summary_sits_between_the_chart_and_the_detail_heading():
+    """블록은 중간에 끼워 넣을 수 없으니(Views API 가 after 를 막는다) 순서로 푼다.
+
+    차트 제목, 강의 제목, '자세히 보기' 순으로 붙이고 표는 나중에 그 제목 뒤에 만든다.
+    """
+    notion = ScriptedNotion()
+    build_dashboard(notion, page_id="dash", jobs_database_id="jobs")
+
+    # ScriptedNotion 은 붙인 순서대로 b1, b2, ... 를 준다. 제목의 블록 id 를 그대로 센다.
+    ids: dict[str, str] = {}
+    order: list[str] = []
+    n = 0
+    for m, p, body in notion.calls:
+        if p != "/blocks/dash/children":
+            continue
+        assert "after" not in body  # Views API 는 after 를 400 으로 막는다
+        for b in body["children"]:
+            n += 1
+            if b["type"] == "heading_2":
+                name = b["heading_2"]["rich_text"][0]["text"]["content"]
+                ids[name] = f"b{n}"
+                order.append(name)
+
+    assert order.index(CHART_HEADING) < order.index(COURSE_SUMMARY_HEADING) < order.index(DETAIL_HEADING)
+
+    head_id = ids[COURSE_SUMMARY_HEADING]
+    summary = next(body for m, p, body in notion.calls
+                   if m == "POST" and p == "/views" and body["name"] == COURSE_SUMMARY_HEADING)
+    assert summary["create_database"]["position"] == {"type": "after_block", "block_id": head_id}
+
+
+def test_build_courses_leaves_the_front_page_alone_without_an_anchor():
+    """하위 페이지만 원할 때는 첫 화면에 아무것도 더하지 않는다."""
+    notion = ScriptedCourses()
+    build_courses(notion, page_id="dash", skill_database_id="skill-db")
+
+    assert not [b for m, p, body in notion.calls if p == "/blocks/dash/children"
+                for b in body["children"]]
+    assert not [body for m, p, body in notion.calls
+                if m == "POST" and p == "/views" and body["name"] == COURSE_SUMMARY_HEADING]
+
+
+def test_build_courses_adds_the_summary_view_after_the_given_block():
+    """제목 블록은 부르는 쪽이 만든다. 여기서는 그 뒤에 표만 만든다."""
+    notion = ScriptedCourses()
+    build_courses(notion, page_id="dash", skill_database_id="skill-db", summary_after_block="head")
+
+    assert not [b for m, p, body in notion.calls if p == "/blocks/dash/children"
+                for b in body["children"]]
+    summary = next(body for m, p, body in notion.calls
+                   if m == "POST" and p == "/views" and body["name"] == COURSE_SUMMARY_HEADING)
+    assert summary["create_database"]["position"] == {"type": "after_block", "block_id": "head"}
