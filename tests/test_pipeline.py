@@ -520,6 +520,37 @@ DEFAULT_TRAINING_CFG = dict(
 )
 
 
+class TestTidyRawCache:
+    """공고 원본 압축은 뒷정리다. 실패해도 실행을 막지 않는다."""
+
+    def test_yesterdays_raw_files_are_packed(self, tmp_path, monkeypatch, capsys):
+        raw = tmp_path / "store" / "raw"
+        raw.mkdir(parents=True)
+        (raw / "catch-2026-09-16.json").write_text("{}", encoding="utf-8")
+        (raw / "catch-2026-09-17.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(run, "ROOT", tmp_path)
+
+        run.tidy_raw_cache("2026-09-17")
+
+        assert (raw / "catch-2026-09-16.json.gz").exists()
+        assert (raw / "catch-2026-09-17.json").exists(), "오늘 것은 아직 읽힌다"
+        assert "1개" in capsys.readouterr().out
+
+    def test_nothing_to_pack_says_nothing(self, tmp_path, monkeypatch, capsys):
+        (tmp_path / "store" / "raw").mkdir(parents=True)
+        monkeypatch.setattr(run, "ROOT", tmp_path)
+        run.tidy_raw_cache("2026-09-17")
+        assert capsys.readouterr().out == ""
+
+    def test_a_failure_is_reported_not_raised(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            run, "compress_old",
+            lambda *a, **k: (_ for _ in ()).throw(OSError("디스크가 꽉 찼습니다")),
+        )
+        run.tidy_raw_cache("2026-09-17")
+        assert "디스크가 꽉 찼습니다" in capsys.readouterr().err
+
+
 def _quiet_sync():
     """push 와 retire 를 조용히 받아 주는 대역."""
     class Quiet:
@@ -738,7 +769,8 @@ class TestPublishCourses:
         """목록(7일)과 본인부담액(30일) 캐시가 한 폴더에 섞여 있다.
 
         이름만으로는 어느 쪽인지 모르므로 긴 창으로 지운다. 짧은 창으로 지우면
-        아직 읽힐 본인부담액 캐시가 날아가 유료 API 를 다시 두드린다.
+        아직 읽힐 본인부담액 캐시가 날아가, 과정 하나마다 호출이 한 번씩 더 는다.
+        요청 사이에 1초를 두므로 그만큼 실행이 길어지기도 한다.
         """
         monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
         monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: _quiet_sync()))

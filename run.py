@@ -30,6 +30,7 @@ from analyze.priority import assign_priority, priority_rank
 from analyze.recommend import Recommendation, recommend, search_terms, target_skills
 from analyze.skill_board import SkillRow, build_skill_rows
 from collect import greenhouse, saramin, woowahan
+from collect.raw_cache import compress_old
 from collect.training import REQUEST_INTERVAL_SEC, fetch_own_fee, prune_cache, search_courses, with_own_fee
 from report.course_notion import CourseSync
 
@@ -662,6 +663,23 @@ def _force_utf8_output() -> None:
             reconfigure(encoding="utf-8", errors="replace")
 
 
+def tidy_raw_cache(run_date: str) -> None:
+    """지난 날 공고 원본을 압축한다.
+
+    지우지 않는 것은 이 원본에만 수집 필터가 걸러낸 공고가 남아 있어서다.
+    나중에 직무 범위를 넓히면 과거를 다시 뽑을 자료가 이쪽뿐이다.
+
+    뒷정리라서 실패해도 실행을 막지 않는다.
+    """
+    try:
+        packed = compress_old(ROOT / "store" / "raw", run_date)
+    except OSError as exc:
+        print(f"  ! 원본 캐시 압축 실패: {exc}", file=sys.stderr)
+        return
+    if packed:
+        print(f"[원본] 지난 날 캐시 {packed}개를 압축했습니다")
+
+
 def main() -> int:
     _force_utf8_output()
     run_date = datetime.now(KST).date().isoformat()
@@ -682,6 +700,7 @@ def main() -> int:
 
     snapshot = ROOT / "store" / "snapshots" / f"{run_date}.jsonl"
     print(f"[스냅샷] {snapshot.relative_to(ROOT)} — {write_snapshot(postings, snapshot)}건")
+    tidy_raw_cache(run_date)
 
     publish(
         attach_company_sizes(analyze(postings), today=datetime.now(KST).date()),
