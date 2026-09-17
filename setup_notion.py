@@ -4,9 +4,10 @@
 손으로 만들면 열 이름 한 글자만 틀려도 적재가 전부 400으로 실패하는데,
 그 실패는 `push()` 가 건수만 세고 넘어가서 원인이 보이지 않는다.
 
-열 목록은 `check_notion.EXPECTED` 에서 가져온다. EXPECTED 는 적재 코드
+열 목록은 `check_notion.SCHEMA` 에서 가져온다. 그 안의 EXPECTED 는 적재 코드
 (`report/notion.py` 의 build_properties)와 테스트로 묶여 있으므로, 여기서
-만드는 DB 와 실제로 쓰는 속성이 갈라질 수 없다.
+만드는 DB 와 실제로 쓰는 속성이 갈라질 수 없다. 나머지 READ_ONLY 는 Notion 이
+값을 채우는 열이라 적재는 건드리지 않지만, 대시보드 보기가 정렬에 쓴다.
 
 사용:
     1. Notion 에서 인테그레이션을 만들고 토큰을 NOTION_TOKEN 에 넣는다.
@@ -27,7 +28,7 @@ import urllib.request
 from typing import Any, Callable, Sequence
 
 from analyze.priority import PRIORITIES
-from check_notion import EXPECTED
+from check_notion import SCHEMA
 from extract.company_size import SIZES, UNKNOWN
 from report.dashboard_layout import VIEWS_API_VERSION, build_courses, build_dashboard
 from report.notion import API_ROOT, INITIAL_STATUS, LISTING_STATUSES, NOTION_VERSION, TIMEOUT_SEC, notion_request
@@ -77,7 +78,7 @@ def database_payload(parent_page_id: str, *, title: str = DEFAULT_TITLE) -> dict
     return {
         "parent": {"type": "page_id", "page_id": parent_page_id},
         "title": [{"type": "text", "text": {"content": title}}],
-        "properties": {name: _property(name, kind) for name, kind in EXPECTED.items()},
+        "properties": {name: _property(name, kind) for name, kind in SCHEMA.items()},
     }
 
 

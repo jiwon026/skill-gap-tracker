@@ -65,7 +65,14 @@ def test_jobs_view_shows_open_postings_under_the_heading():
         "position": {"type": "after_block", "block_id": "h"},
     }
     assert body["filter"] == {"property": "공고 현황", "select": {"equals": "모집중"}}
-    assert body["sorts"] == [{"property": "우선순위", "direction": "ascending"}]
+    # 우선순위가 같으면 새로 들어온 공고가 위로 온다. Views API 는 sort 마다
+    # property 를 요구해서(2026-09-17 실측, timestamp 는 400) created_time 열로 건다.
+    assert body["sorts"] == [
+        {"property": "우선순위", "direction": "ascending"},
+        {"property": "생성 일시", "direction": "descending"},
+    ]
+    # 정렬에만 쓰고 표에는 안 보인다. 열을 늘리면 표가 가로로 넘친다.
+    assert "생성 일시" not in JOB_COLUMNS
 
 
 def test_skill_chart_counts_missing_skills_of_open_postings_only():

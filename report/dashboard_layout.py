@@ -31,6 +31,8 @@ from report.notion import OPEN
 VIEWS_API_VERSION = "2026-03-11"
 
 JOB_COLUMNS = ("우선순위", "회사", "공고명", "마감", "상태")
+#: 표에는 안 보이고 정렬에만 쓰는 열.
+CREATED_COLUMN = "생성 일시"
 OWNED_COLUMNS = ("스킬", "분류", "근거", "요구 공고 수")
 GAP_COLUMNS = ("스킬", "요구 공고 수", "요구 회사", "분류")
 
@@ -110,7 +112,15 @@ def jobs_view_payload(data_source_id: str, property_ids: Mapping[str, str], *, p
         "create_database": _linked(page_id, after_block),
         "filter": {"property": "공고 현황", "select": {"equals": OPEN}},
         # select 정렬은 선택지 순서를 따른다. 우선순위 선택지는 높음, 중간, 낮음 순이다.
-        "sorts": [{"property": "우선순위", "direction": "ascending"}],
+        # 같은 우선순위 안에서는 새로 들어온 공고가 위로 오게 생성 시각을 뒤에 건다.
+        # Views API 는 sort 마다 property 를 요구한다. 문서에 있는
+        # {"timestamp": "created_time"} 은 400 이 난다(2026-09-17 실측).
+        # 그래서 created_time 열(check_notion.READ_ONLY)로 걸고, 표에는 숨긴다.
+        # 열을 하나 늘렸다가 표가 가로로 넘쳐 되돌린 적이 있다(NEW 칩, 2026-09-17).
+        "sorts": [
+            {"property": "우선순위", "direction": "ascending"},
+            {"property": CREATED_COLUMN, "direction": "descending"},
+        ],
         "configuration": {"type": "table", "properties": visible_columns(property_ids, JOB_COLUMNS)},
     }
 

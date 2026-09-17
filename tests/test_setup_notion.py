@@ -31,10 +31,19 @@ def option_names(payload, name):
 class TestPayload:
     def test_properties_match_what_the_pipeline_writes(self, payload):
         """check_notion.EXPECTED 는 build_properties 와 테스트로 묶여 있다
-        (test_notion.TestSchemaCheckContract). 여기까지 묶으면 세 곳이 한 몸이 된다."""
-        assert set(payload["properties"]) == set(check_notion.EXPECTED)
-        for name, kind in check_notion.EXPECTED.items():
+        (test_notion.TestSchemaCheckContract). 여기까지 묶으면 세 곳이 한 몸이 된다.
+
+        READ_ONLY 는 적재 코드가 값을 쓰지 않지만 DB 에는 있어야 한다. 이게 빠지면
+        새로 설치한 사람의 '지금 볼 공고' 보기가 없는 열로 정렬하려다 400 이 난다.
+        """
+        schema = {**check_notion.EXPECTED, **check_notion.READ_ONLY}
+        assert set(payload["properties"]) == set(schema)
+        for name, kind in schema.items():
             assert list(payload["properties"][name]) == [kind], name
+
+    def test_read_only_properties_are_not_written_by_the_pipeline(self):
+        """Notion 이 채우는 값이라 적재가 건드리면 안 된다."""
+        assert not set(check_notion.READ_ONLY) & set(check_notion.EXPECTED)
 
     def test_parent_and_title(self, payload):
         assert payload["parent"] == {"type": "page_id", "page_id": PAGE_ID}
@@ -107,7 +116,7 @@ class TestCreate:
         assert request.get_header("Authorization") == "Bearer secret"
         assert request.get_header("Notion-version") == NOTION_VERSION
         body = json.loads(request.data.decode("utf-8"))
-        assert set(body["properties"]) == set(check_notion.EXPECTED)
+        assert set(body["properties"]) == set(check_notion.EXPECTED) | set(check_notion.READ_ONLY)
 
 
 class TestMain:

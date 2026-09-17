@@ -42,6 +42,16 @@ EXPECTED: dict[str, str] = {
     "공고 현황": "select",
 }
 
+#: 적재 코드가 값을 쓰지 않지만 DB 에 있어야 하는 속성. 값은 Notion 이 채운다.
+#: 대시보드의 '지금 볼 공고' 보기가 이 열로 정렬한다. Views API 는 sort 마다
+#: property 를 요구해서 열 없이 생성 시각으로 정렬할 방법이 없다(2026-09-17 실측).
+READ_ONLY: dict[str, str] = {
+    "생성 일시": "created_time",
+}
+
+#: DB 에 있어야 하는 속성 전체. 만들 때도 점검할 때도 이걸 쓴다.
+SCHEMA: dict[str, str] = {**EXPECTED, **READ_ONLY}
+
 OK, FAIL, WARN = "  OK  ", "  실패  ", "  경고  "
 
 
@@ -108,7 +118,7 @@ def main() -> int:
     actual = {name: prop.get("type") for name, prop in (database.get("properties") or {}).items()}
     problems = 0
 
-    for name, expected_type in EXPECTED.items():
+    for name, expected_type in SCHEMA.items():
         if name not in actual:
             near = [a for a in actual if a.replace(" ", "") == name.replace(" ", "")]
             hint = f" (비슷한 이름: {near[0]!r} — 공백을 확인하세요)" if near else ""
@@ -121,7 +131,7 @@ def main() -> int:
             print(f"{FAIL}'{name}' 타입이 {actual[name]} 입니다. {expected_type} 여야 합니다{note}")
             problems += 1
 
-    extra = sorted(set(actual) - set(EXPECTED))
+    extra = sorted(set(actual) - set(SCHEMA))
     if extra:
         print(f"{WARN}쓰지 않는 속성이 있습니다(무해): {', '.join(extra)}")
 
@@ -129,7 +139,7 @@ def main() -> int:
         print(f"\n{problems}건을 고쳐야 적재가 됩니다.")
         return 1
 
-    print(f"{OK}{len(EXPECTED)}개 속성 모두 일치")
+    print(f"{OK}{len(SCHEMA)}개 속성 모두 일치")
     print("\n준비됐습니다. python run.py 를 실행하세요.")
     return 0
 
