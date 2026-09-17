@@ -126,19 +126,51 @@ def _cache_path(cache_dir: Path, name: str, today: str) -> Path:
     return cache_dir / f"{name}_{today}.json"
 
 
+def _cache_date(path: Path) -> date | None:
+    """파일 이름 끝에 붙은 날짜. 캐시 이름이 아니면 None 이다."""
+    try:
+        return date.fromisoformat(path.stem.rsplit("_", 1)[-1])
+    except ValueError:
+        return None
+
+
 def _fresh_cache(cache_dir: Path, name: str, today: str, cache_days: int) -> Path | None:
     """cache_days 안에 받아 둔 파일 중 가장 최근 것."""
     limit = date.fromisoformat(today) - timedelta(days=cache_days - 1)
     candidates = []
     for path in cache_dir.glob(f"{name}_*.json"):
-        stamp = path.stem.rsplit("_", 1)[-1]
-        try:
-            when = date.fromisoformat(stamp)
-        except ValueError:
-            continue
-        if limit <= when <= date.fromisoformat(today):
+        when = _cache_date(path)
+        if when is not None and limit <= when <= date.fromisoformat(today):
             candidates.append((when, path))
     return max(candidates)[1] if candidates else None
+
+
+def prune_cache(cache_dir: Path, today: str, *, keep_days: int) -> int:
+    """다시 읽힐 수 없는 캐시 파일을 지우고, 지운 수를 준다.
+
+    _fresh_cache 는 keep_days 안의 파일만 본다. 그보다 오래된 파일은 영영 안
+    읽히는데도 남는다. 같은 이름으로 새 파일이 쓰이는 검색어는 그나마 낫지만,
+    검색어가 skills.yaml 에서 빠지거나 과정이 추천에서 밀리면 그 이름은 다시
+    안 나온다. 그 파일들이 쌓이는 걸 막으려면 날짜로 쓸어내는 수밖에 없다.
+
+    목록과 본인부담액 캐시가 한 폴더에 섞여 있고 이름만으로는 어느 쪽인지
+    모른다. 그래서 둘 중 긴 창을 keep_days 로 받아 보수적으로 지운다.
+
+    앞날 날짜는 남긴다. 시계가 어긋난 날 쓴 파일을 지우면 그날 받은 것을
+    또 받는다.
+    """
+    cache_dir = Path(cache_dir)
+    if not cache_dir.is_dir():
+        return 0
+    limit = date.fromisoformat(today) - timedelta(days=keep_days - 1)
+    removed = 0
+    for path in cache_dir.glob("*.json"):
+        when = _cache_date(path)
+        if when is None or when >= limit:
+            continue
+        path.unlink()
+        removed += 1
+    return removed
 
 
 def _call(url: str, params: Mapping[str, str], opener: Callable[..., Any]) -> dict[str, Any]:

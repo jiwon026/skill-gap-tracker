@@ -30,7 +30,7 @@ from analyze.priority import assign_priority, priority_rank
 from analyze.recommend import Recommendation, recommend, search_terms, target_skills
 from analyze.skill_board import SkillRow, build_skill_rows
 from collect import greenhouse, saramin, woowahan
-from collect.training import REQUEST_INTERVAL_SEC, fetch_own_fee, search_courses, with_own_fee
+from collect.training import REQUEST_INTERVAL_SEC, fetch_own_fee, prune_cache, search_courses, with_own_fee
 from report.course_notion import CourseSync
 
 #: 저장소에 넣지 않는 개인용 수집기를 두는 패키지(.gitignore). 모듈마다
@@ -633,9 +633,24 @@ def publish_courses(
         print(f"  ! 강의 추천 실패: {exc}", file=sys.stderr)
         return
 
+    # 창을 넘긴 캐시는 다시 안 읽히는데 지워지지도 않는다. 목록(7일)과
+    # 본인부담액(30일)이 한 폴더에 섞여 있고 이름만으로는 어느 쪽인지 모르니
+    # 긴 창으로 지운다. 짧은 창으로 지우면 아직 쓸 본인부담액 캐시가 날아가
+    # 그만큼 API 를 다시 두드린다.
+    # 뒷정리라서 여기서 터져도 위의 추천 결과는 그대로 보고한다.
+    try:
+        pruned = prune_cache(
+            cache_dir, run_date,
+            keep_days=max(config["list_cache_days"], config["detail_cache_days"]),
+        )
+    except OSError as exc:
+        print(f"  ! 강의 캐시 정리 실패: {exc}", file=sys.stderr)
+        pruned = 0
+
     print(
         f"[강의] 대상 스킬 {len(targets)}, 추천 {len(priced)}, 첫 화면 {len(front)},"
-        f" 신규 {result.created}, 갱신 {result.updated}, 지난 추천 {retired}, 실패 {result.failed}"
+        f" 신규 {result.created}, 갱신 {result.updated}, 지난 추천 {retired},"
+        f" 캐시 정리 {pruned}, 실패 {result.failed}"
     )
 
 

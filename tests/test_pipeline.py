@@ -520,6 +520,18 @@ DEFAULT_TRAINING_CFG = dict(
 )
 
 
+def _quiet_sync():
+    """push 와 retire 를 조용히 받아 주는 대역."""
+    class Quiet:
+        def push(self, recs, pages, *, featured=()):
+            return CourseSyncResult(created=0, updated=0, failed=0)
+
+        def retire(self, keys):
+            return 0
+
+    return Quiet()
+
+
 class TestPublishCourses:
     """훈련 추천은 대시보드의 덤이다. 실패해도 경고만 남긴다."""
 
@@ -721,3 +733,48 @@ class TestPublishCourses:
         assert len(recorder.recs) == 2
         # 검색어 2개 사이 1번, 본인부담액 조회 2건 사이 1번.
         assert self.sleep_calls.count(run.REQUEST_INTERVAL_SEC) >= 2
+
+    def test_stale_cache_files_are_pruned_with_the_longer_window(self, monkeypatch, capsys):
+        """목록(7일)과 본인부담액(30일) 캐시가 한 폴더에 섞여 있다.
+
+        이름만으로는 어느 쪽인지 모르므로 긴 창으로 지운다. 짧은 창으로 지우면
+        아직 읽힐 본인부담액 캐시가 날아가 유료 API 를 다시 두드린다.
+        """
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: _quiet_sync()))
+        monkeypatch.setattr(
+            run, "_config",
+            _fake_config(skills={"skills": []}, training=DEFAULT_TRAINING_CFG),
+        )
+
+        seen = {}
+
+        def fake_prune(cache_dir, today, *, keep_days):
+            seen.update(cache_dir=cache_dir, today=today, keep_days=keep_days)
+            return 4
+
+        monkeypatch.setattr(run, "prune_cache", fake_prune)
+        run.publish_courses((), {}, run_date="2026-09-16")
+
+        assert seen["keep_days"] == 30
+        assert seen["today"] == "2026-09-16"
+        assert seen["cache_dir"].name == "work24"
+        assert "캐시 정리 4" in capsys.readouterr().out
+
+    def test_a_failed_prune_does_not_hide_the_course_summary(self, monkeypatch, capsys):
+        """정리는 뒷정리다. 여기서 터져도 추천 결과는 보고돼야 한다."""
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: _quiet_sync()))
+        monkeypatch.setattr(
+            run, "_config",
+            _fake_config(skills={"skills": []}, training=DEFAULT_TRAINING_CFG),
+        )
+        monkeypatch.setattr(
+            run, "prune_cache",
+            lambda *a, **k: (_ for _ in ()).throw(OSError("파일이 잠겨 있습니다")),
+        )
+        run.publish_courses((), {}, run_date="2026-09-16")
+
+        out = capsys.readouterr()
+        assert "[강의] 대상 스킬 0" in out.out
+        assert "파일이 잠겨 있습니다" in out.err

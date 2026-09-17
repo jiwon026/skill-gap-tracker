@@ -170,6 +170,11 @@ powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 07:30
 - 조건은 `config/training.yaml` 에서 바꿉니다(기간, 스킬당 건수, 지역, 제외 대상).
 - 강의 DB 의 '상태'는 사용자 열입니다. 자동 실행이 덮어쓰지 않고, 추천에서 빠진
   과정도 지우지 않고 '지난 추천'으로만 바꿉니다.
+- 받아 온 응답은 `store/raw/work24/` 에 날짜별로 캐시합니다. 목록은
+  `list_cache_days`, 본인부담액은 `detail_cache_days` 동안 다시 씁니다. 두 창 중
+  **긴 쪽을 넘긴 파일은 매 실행 끝에 지웁니다.** 그 뒤로는 다시 읽히지 않는데,
+  검색어가 빠지거나 과정이 추천에서 밀리면 같은 이름으로 새 파일이 안 쓰여
+  그냥 쌓이기만 하기 때문입니다.
 
 ## 테스트
 

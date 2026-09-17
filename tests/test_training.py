@@ -14,6 +14,7 @@ from collect.training import (
     WEEKEND_LABELS,
     fetch_own_fee,
     parse_courses,
+    prune_cache,
     search_courses,
     with_own_fee,
 )
@@ -223,3 +224,46 @@ class TestWithOwnFee:
         assert updated.own_fee == 43000
         assert course.own_fee is None
         assert updated is not course
+
+
+class TestPruneCache:
+    """캐시는 스스로 줄어들어야 한다.
+
+    _fresh_cache 는 keep_days 안의 파일만 본다. 그보다 오래된 파일은 영영
+    안 읽힌다. 같은 이름으로 새 파일이 쓰이면 묻히기라도 하지만, 검색어가
+    skills.yaml 에서 빠지거나 과정이 추천에서 밀리면 그 이름은 다시 안 나온다.
+    그래서 날짜로 쓸어낸다.
+    """
+
+    def _touch(self, folder, *names):
+        for name in names:
+            (folder / name).write_text("{}", encoding="utf-8")
+
+    def test_files_older_than_the_window_are_removed(self, tmp_path):
+        self._touch(tmp_path, "Power_BI__90d_p3_2026-08-01.json",
+                    "Power_BI__90d_p3_2026-09-16.json")
+        removed = prune_cache(tmp_path, "2026-09-17", keep_days=30)
+        assert removed == 1
+        assert [p.name for p in tmp_path.iterdir()] == ["Power_BI__90d_p3_2026-09-16.json"]
+
+    def test_the_last_day_of_the_window_is_kept(self, tmp_path):
+        """keep_days=30 이면 29일 전까지는 _fresh_cache 가 아직 읽는다."""
+        self._touch(tmp_path, "AIG1_4_500_2026-08-19.json")
+        assert prune_cache(tmp_path, "2026-09-17", keep_days=30) == 0
+        self._touch(tmp_path, "AIG1_4_500_2026-08-18.json")
+        assert prune_cache(tmp_path, "2026-09-17", keep_days=30) == 1
+
+    def test_dates_in_the_future_are_kept(self, tmp_path):
+        """시계가 어긋난 날 쓴 파일을 지우면 그날 받은 걸 또 받는다."""
+        self._touch(tmp_path, "term__90d_p3_2026-09-20.json")
+        assert prune_cache(tmp_path, "2026-09-17", keep_days=7) == 0
+
+    def test_files_without_a_date_are_left_alone(self, tmp_path):
+        """캐시가 아닌 파일이 섞여 있을 수 있다. 모르는 건 안 건드린다."""
+        self._touch(tmp_path, "notes.txt", "term__90d_p3_bad.json")
+        assert prune_cache(tmp_path, "2026-09-17", keep_days=7) == 0
+        assert len(list(tmp_path.iterdir())) == 2
+
+    def test_a_missing_directory_is_not_an_error(self, tmp_path):
+        assert prune_cache(tmp_path / "없음", "2026-09-17", keep_days=7) == 0
+
