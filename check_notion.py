@@ -33,6 +33,7 @@ EXPECTED: dict[str, str] = {
     "마감": "rich_text",
     "보유 스킬": "multi_select",
     "부족 스킬": "multi_select",
+    "핵심 부족 스킬": "multi_select",
     "어필 경험": "multi_select",
     "어필 포인트": "rich_text",
     "URL": "url",

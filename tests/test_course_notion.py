@@ -9,6 +9,7 @@ from analyze.recommend import DIRECT, FOUNDATION, Recommendation
 from collect.training import Course
 from report.course_notion import (
     COURSE_DB_PROPERTIES,
+    FEATURED,
     INITIAL_STATUS,
     OPEN_RECOMMENDATION,
     PAST_RECOMMENDATION,
@@ -82,6 +83,14 @@ class TestProperties:
 
     def test_listing_starts_as_open(self):
         assert course_properties(rec(), skill_page_id="s")["추천 현황"] == {"select": {"name": OPEN_RECOMMENDATION}}
+
+    def test_featured_marks_only_the_courses_shown_on_the_front_page(self):
+        assert course_properties(rec(), skill_page_id="s", featured=True)["첫 화면"] == {"select": {"name": FEATURED}}
+
+    def test_featured_is_cleared_when_a_course_drops_off_the_front_page(self):
+        """빈 값으로 되돌린다. 안 그러면 어제 고른 과정이 첫 화면에 남는다."""
+        assert course_properties(rec(), skill_page_id="s")["첫 화면"] == {"select": None}
+        assert course_properties(rec(), skill_page_id="s", for_update=True)["첫 화면"] == {"select": None}
 
 
 class TestPush:

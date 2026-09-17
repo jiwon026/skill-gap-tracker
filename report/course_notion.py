@@ -13,7 +13,7 @@ import os
 import sys
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator, Mapping, Protocol
+from typing import Any, Collection, Iterable, Iterator, Mapping, Protocol
 
 from analyze.recommend import Recommendation
 from report.notion import _choice, _text, notion_request
@@ -33,6 +33,7 @@ COURSE_DB_PROPERTIES: dict[str, str] = {
     "정원": "rich_text",
     "링크": "url",
     "추천 현황": "select",
+    "첫 화면": "select",
     "상태": "select",
     "key": "rich_text",
 }
@@ -40,15 +41,22 @@ COURSE_DB_PROPERTIES: dict[str, str] = {
 OPEN_RECOMMENDATION, PAST_RECOMMENDATION = "추천 중", "지난 추천"
 LISTINGS = (OPEN_RECOMMENDATION, PAST_RECOMMENDATION)
 
+#: 첫 화면 표에 세울 것만 '예'. 보기는 이 값으로 상위 몇 개를 고른다.
+FEATURED = "예"
+
 #: 사용자가 쓰는 열. 시스템은 새 행에만 첫 값을 넣는다.
 INITIAL_STATUS = "관심"
 COURSE_STATUSES = (INITIAL_STATUS, "신청함", "수강 중", "수료", "보류")
 
 
 def course_properties(
-    rec: Recommendation, *, skill_page_id: str, for_update: bool = False
+    rec: Recommendation, *, skill_page_id: str, for_update: bool = False, featured: bool = False
 ) -> dict[str, Any]:
-    """추천 한 건을 Notion 속성으로. 순수 함수다."""
+    """추천 한 건을 Notion 속성으로. 순수 함수다.
+
+    `featured`는 첫 화면 표에 세울지다. 매 실행 다시 계산한다. 빠진 과정은
+    빈 값으로 되돌려야 어제 고른 것이 화면에 남지 않는다.
+    """
     course = rec.course
     seats = f"정원 {course.capacity}명" if course.capacity else ""
     if course.applicants is not None and seats:
@@ -69,6 +77,7 @@ def course_properties(
         "정원": _text(seats),
         "링크": {"url": course.url or None},
         "추천 현황": _choice(OPEN_RECOMMENDATION),
+        "첫 화면": _choice(FEATURED) if featured else {"select": None},
         "key": _text(rec.key),
     }
     if not for_update:
@@ -148,7 +157,11 @@ class CourseSync:
         return cls(client=HttpCourseClient(token, database_id))
 
     def push(
-        self, recommendations: Iterable[Recommendation], skill_pages: Mapping[str, str]
+        self,
+        recommendations: Iterable[Recommendation],
+        skill_pages: Mapping[str, str],
+        *,
+        featured: Collection[str] = (),
     ) -> CourseSyncResult:
         created = updated = failed = 0
         seen: set[str] = set()
@@ -165,11 +178,14 @@ class CourseSync:
                 page_id = self.client.find_page_id(rec.key)
                 if page_id:
                     self.client.update_page(
-                        page_id, course_properties(rec, skill_page_id=skill_page_id, for_update=True)
+                        page_id,
+                        course_properties(rec, skill_page_id=skill_page_id, for_update=True,
+                                          featured=rec.key in featured),
                     )
                     updated += 1
                 else:
-                    self.client.create_page(course_properties(rec, skill_page_id=skill_page_id))
+                    self.client.create_page(course_properties(
+                        rec, skill_page_id=skill_page_id, featured=rec.key in featured))
                     created += 1
             except (OSError, ValueError, KeyError) as exc:
                 failed += 1

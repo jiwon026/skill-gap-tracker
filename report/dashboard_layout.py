@@ -17,9 +17,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
 from analyze.recommend import DIRECT, FOUNDATION
+from analyze.featured import FEATURED_LIMIT
 from report.course_notion import (
     COURSE_DB_PROPERTIES,
     COURSE_STATUSES,
+    FEATURED,
     LISTINGS,
     OPEN_RECOMMENDATION,
 )
@@ -45,7 +47,11 @@ COURSE_COLUMNS = ("과정명", "스킬", "연결", "수업 방식", "기간", "�
 #: 첫 화면에 두는 요약 표. 어떤 역량을 무슨 과정으로, 언제, 어떤 성격으로
 #: 채우는지만 본다. 비용과 신청 상태는 하위 페이지에서 본다.
 COURSE_SUMMARY_HEADING = "들어볼 만한 강의"
-COURSE_SUMMARY_COLUMNS = ("스킬", "과정명", "기간", "연결")
+COURSE_SUMMARY_COLUMNS = ("스킬", "과정명", "기간", "수업 방식")
+
+#: 차트가 세는 열. '부족 스킬' 전체가 아니라 오늘 상위 몇 개만 담긴다.
+#: Notion 차트는 막대를 상위 N 개로 자르지 못한다(2026-09-17 확인).
+CHART_PROPERTY = "핵심 부족 스킬"
 
 #: (method, path, body) 를 받아 응답 JSON 을 주는 호출. 테스트는 대역을 넣는다.
 Request = Callable[..., Mapping[str, Any]]
@@ -114,17 +120,18 @@ def skill_chart_payload(data_source_id: str, property_ids: Mapping[str, str], *,
         "filter": {
             "and": [
                 {"property": "공고 현황", "select": {"equals": OPEN}},
-                {"property": "부족 스킬", "multi_select": {"is_not_empty": True}},
+                {"property": CHART_PROPERTY, "multi_select": {"is_not_empty": True}},
             ]
         },
         "configuration": {
             "type": "chart",
             "chart_type": "bar",
-            "x_axis": {"type": "multi_select", "property_id": property_ids["부족 스킬"], "sort": {"type": "manual"}},
+            "x_axis": {"type": "multi_select", "property_id": property_ids[CHART_PROPERTY],
+                       "sort": {"type": "manual"}},
             "y_axis": {"aggregator": "count"},
             "sort": "y_descending",
-            # 선택지는 한 번 쓰이면 DB 에 남는다. 이게 없으면 지금 아무 공고도
-            # 요구하지 않는 스킬이 0짜리 막대로 계속 쌓인다(31개 중 5개만 값이 있었다).
+            # 선택지는 한 번 쓰이면 DB 에 남는다. 이게 없으면 어제까지 상위였던
+            # 스킬이 0짜리 막대로 계속 쌓인다(31개 중 5개만 값이 있었다).
             "hide_empty_groups": True,
         },
     }
@@ -209,6 +216,8 @@ def course_database_payload(parent_page_id: str, skill_data_source_id: str) -> d
         if name == "스킬":
             properties[name] = {"relation": {"data_source_id": skill_data_source_id, "type": "single_property",
                                              "single_property": {}}}
+        elif name == "첫 화면":
+            properties[name] = {"select": {"options": [{"name": FEATURED, "color": "blue"}]}}
         elif name == "추천 현황":
             properties[name] = {"select": {"options": [{"name": LISTINGS[0], "color": "green"},
                                                        {"name": LISTINGS[1], "color": "gray"}]}}
@@ -249,13 +258,20 @@ def course_summary_view_payload(
     page_id: str,
     after_block: str,
 ) -> dict[str, Any]:
-    """첫 화면용 강의 표. 추천 중인 것만, 네 열만 보여 준다."""
+    """첫 화면용 강의 표. 추천 중이면서 첫 화면으로 고른 것만, 네 열만 보여 준다.
+
+    표도 '상위 N 줄'을 못 건다. 파이프라인이 스킬을 돌아가며 고른 것에만
+    '첫 화면' 표시를 남기고, 여기서는 그 표시를 조건으로 건다.
+    """
     return {
         "data_source_id": data_source_id,
         "name": COURSE_SUMMARY_HEADING,
         "type": "table",
         "create_database": _linked(page_id, after_block),
-        "filter": {"property": "추천 현황", "select": {"equals": OPEN_RECOMMENDATION}},
+        "filter": {"and": [
+            {"property": "추천 현황", "select": {"equals": OPEN_RECOMMENDATION}},
+            {"property": "첫 화면", "select": {"equals": FEATURED}},
+        ]},
         # 직접 배우는 과정을 먼저, 그 안에서는 빨리 시작하는 것을 먼저 본다.
         "sorts": [{"property": "연결", "direction": "ascending"},
                   {"property": "기간", "direction": "ascending"}],

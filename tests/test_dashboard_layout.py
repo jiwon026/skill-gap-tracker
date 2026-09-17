@@ -6,10 +6,17 @@
 import pytest
 
 from analyze.recommend import DIRECT, FOUNDATION
-from report.course_notion import COURSE_DB_PROPERTIES, COURSE_STATUSES, LISTINGS, OPEN_RECOMMENDATION
+from report.course_notion import (
+    COURSE_DB_PROPERTIES,
+    COURSE_STATUSES,
+    FEATURED,
+    LISTINGS,
+    OPEN_RECOMMENDATION,
+)
 from report.dashboard import MISSING, OWNED, SKILL_DB_PROPERTIES, SUMMARY_HEADING
 from report.dashboard_layout import (
     CHART_HEADING,
+    CHART_PROPERTY,
     COURSE_COLUMNS,
     COURSE_PAGE,
     COURSE_SUMMARY_COLUMNS,
@@ -33,7 +40,7 @@ from report.dashboard_layout import (
 
 JOB_PROPS = {name: f"id-{i}" for i, name in enumerate(
     ["공고명", "회사", "규모", "우선순위", "지역", "마감", "보유 스킬", "부족 스킬",
-     "어필 경험", "어필 포인트", "URL", "상태", "key", "공고 현황"])}
+     "핵심 부족 스킬", "어필 경험", "어필 포인트", "URL", "상태", "key", "공고 현황"])}
 SKILL_PROPS = {name: f"s-{i}" for i, name in enumerate(SKILL_DB_PROPERTIES)}
 
 
@@ -64,9 +71,13 @@ def test_skill_chart_counts_missing_skills_of_open_postings_only():
     body = skill_chart_payload("ds", JOB_PROPS, page_id="page", after_block="h")
     conf = body["configuration"]
     assert conf["chart_type"] == "bar"
-    assert conf["x_axis"] == {"type": "multi_select", "property_id": JOB_PROPS["부족 스킬"], "sort": {"type": "manual"}}
-    # '부족 스킬 없음' 막대가 끼지 않게 한다(2026-09-15 확인).
-    assert {"property": "부족 스킬", "multi_select": {"is_not_empty": True}} in body["filter"]["and"]
+    # 전체 '부족 스킬' 이 아니라 오늘 상위 몇 개만 담긴 열을 센다. Notion 차트는
+    # 막대를 상위 N 개로 자르지 못한다(2026-09-17 확인).
+    assert conf["x_axis"] == {"type": "multi_select", "property_id": JOB_PROPS[CHART_PROPERTY],
+                              "sort": {"type": "manual"}}
+    assert CHART_PROPERTY == "핵심 부족 스킬"
+    # 빈 값 막대가 끼지 않게 한다(2026-09-15 확인).
+    assert {"property": CHART_PROPERTY, "multi_select": {"is_not_empty": True}} in body["filter"]["and"]
     # 지금 아무 공고도 요구하지 않는 선택지가 0짜리 막대로 남지 않게 한다(2026-09-16 확인).
     assert conf["hide_empty_groups"] is True
 
@@ -227,10 +238,13 @@ def test_course_summary_view_shows_only_the_four_summary_columns():
         "parent": {"type": "page_id", "page_id": "dash"},
         "position": {"type": "after_block", "block_id": "h"},
     }
-    assert body["filter"] == {"property": "추천 현황", "select": {"equals": OPEN_RECOMMENDATION}}
+    assert body["filter"] == {"and": [
+        {"property": "추천 현황", "select": {"equals": OPEN_RECOMMENDATION}},
+        {"property": "첫 화면", "select": {"equals": FEATURED}},
+    ]}
     shown = [c["property_id"] for c in body["configuration"]["properties"] if c["visible"]]
     assert shown == [props[n] for n in COURSE_SUMMARY_COLUMNS]
-    assert COURSE_SUMMARY_COLUMNS == ("스킬", "과정명", "기간", "연결")
+    assert COURSE_SUMMARY_COLUMNS == ("스킬", "과정명", "기간", "수업 방식")
 
 
 def test_course_summary_sits_between_the_chart_and_the_detail_heading():

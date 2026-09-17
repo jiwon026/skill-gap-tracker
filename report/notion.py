@@ -21,7 +21,7 @@ import os
 import sys
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Iterator, Mapping, Protocol
+from typing import Any, Callable, Collection, Iterable, Iterator, Mapping, Protocol
 
 from analyze.gap import AnalyzedPosting
 from analyze.priority import assign_priority
@@ -123,13 +123,19 @@ def build_properties(
     skill_names: Mapping[str, str],
     *,
     for_update: bool = False,
+    featured_skills: Collection[str] = (),
 ) -> dict[str, Any]:
     """분석 결과 한 건을 Notion 속성으로 옮긴다.
 
     `for_update=True`면 사용자가 소유한 속성('상태')을 뺀다.
+
+    `featured_skills`는 첫 화면 차트에 세울 스킬 이름이다. 부족 스킬 중
+    거기 드는 것만 '핵심 부족 스킬'에 넣는다. Notion 차트는 막대를 상위
+    몇 개로 못 자르므로, 자를 것을 미리 잘라서 보낸다.
     """
     posting, gap = analyzed.posting, analyzed.gap
     closing = posting.deadline_note or posting.deadline or ""
+    missing = gap.labeled(skill_names, "missing")
     properties: dict[str, Any] = {
         "공고명": {"title": [{"text": {"content": posting.title[:2000]}}]},
         "회사": _choice(analyzed.company_name),
@@ -140,7 +146,8 @@ def build_properties(
         # 비어 있으면 빈 값을 보낸다. 속성을 빼면 예전 마감 정보가 남는다.
         "마감": _text(closing) if closing else {"rich_text": []},
         "보유 스킬": _options(gap.labeled(skill_names, "matched")),
-        "부족 스킬": _options(gap.labeled(skill_names, "missing")),
+        "부족 스킬": _options(missing),
+        "핵심 부족 스킬": _options(n for n in missing if n in featured_skills),
         "어필 경험": _options(m.name for m in analyzed.experiences),
         "어필 포인트": _text(analyzed.pitch),
         "URL": {"url": posting.url},
@@ -263,6 +270,8 @@ class NotionSync:
         self,
         rows: Iterable[AnalyzedPosting],
         skill_names: Mapping[str, str],
+        *,
+        featured_skills: Collection[str] = (),
     ) -> SyncResult:
         created = updated = failed = 0
         seen: set[str] = set()
@@ -279,11 +288,15 @@ class NotionSync:
                 page_id = self.client.find_page_id(key)
                 if page_id:
                     self.client.update_page(
-                        page_id, build_properties(analyzed, skill_names, for_update=True)
+                        page_id,
+                        build_properties(analyzed, skill_names, for_update=True,
+                                         featured_skills=featured_skills),
                     )
                     updated += 1
                 else:
-                    self.client.create_page(build_properties(analyzed, skill_names))
+                    self.client.create_page(
+                        build_properties(analyzed, skill_names, featured_skills=featured_skills)
+                    )
                     created += 1
             except (OSError, ValueError, KeyError) as exc:
                 failed += 1

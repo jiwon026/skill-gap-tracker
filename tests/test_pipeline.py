@@ -468,7 +468,7 @@ class TestPublish:
         from report.notion import RetireResult, SyncResult
 
         class FakeSync:
-            def push(self, rows, names):
+            def push(self, rows, names, *, featured_skills=()):
                 return SyncResult(created=3, updated=0, failed=0)
 
             def retire(self, *, active, collected, complete_sources):
@@ -554,7 +554,7 @@ class TestPublishCourses:
         calls = []
 
         class Recorder:
-            def push(self, recs, pages):
+            def push(self, recs, pages, *, featured=()):
                 calls.append(("push", len(list(recs))))
                 return CourseSyncResult(created=0, updated=0, failed=0)
 
@@ -583,8 +583,9 @@ class TestPublishCourses:
         monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
 
         class Recorder:
-            def push(self, recs, pages):
+            def push(self, recs, pages, *, featured=()):
                 self.recs = list(recs)
+                self.featured = featured
                 return CourseSyncResult(created=0, updated=0, failed=0)
 
             def retire(self, keys):
@@ -614,6 +615,9 @@ class TestPublishCourses:
         run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
 
         assert [r.course.course_id for r in recorder.recs] == ["G1"]
+        # 첫 화면에 세울 것은 적재 때 함께 넘어간다. Notion 표가 상위 N 줄을
+        # 못 자르므로 파이프라인이 골라 표시해 둔다.
+        assert recorder.featured == frozenset({r.key for r in recorder.recs})
         err = capsys.readouterr().err
         assert "강의 검색 실패 (실패어)" in err and "검색 서버 오류" in err
 
@@ -622,8 +626,9 @@ class TestPublishCourses:
         monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
 
         class Recorder:
-            def push(self, recs, pages):
+            def push(self, recs, pages, *, featured=()):
                 self.recs = list(recs)
+                self.featured = featured
                 return CourseSyncResult(created=0, updated=0, failed=0)
 
             def retire(self, keys):
@@ -661,7 +666,7 @@ class TestPublishCourses:
         class Recorder:
             retire_called = False
 
-            def push(self, recs, pages):
+            def push(self, recs, pages, *, featured=()):
                 return CourseSyncResult(created=0, updated=0, failed=0)
 
             def retire(self, keys):
@@ -685,8 +690,9 @@ class TestPublishCourses:
         monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
 
         class Recorder:
-            def push(self, recs, pages):
+            def push(self, recs, pages, *, featured=()):
                 self.recs = list(recs)
+                self.featured = featured
                 return CourseSyncResult(created=0, updated=0, failed=0)
 
             def retire(self, keys):

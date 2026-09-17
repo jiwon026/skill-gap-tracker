@@ -24,6 +24,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import yaml
 
+from analyze.featured import featured_courses, top_missing_skills
 from analyze.gap import AnalyzedPosting, compute_gap
 from analyze.priority import assign_priority, priority_rank
 from analyze.recommend import Recommendation, recommend, search_terms, target_skills
@@ -430,8 +431,13 @@ def publish(
         print("\n[Notion] NOTION_TOKEN / NOTION_DATABASE_ID 가 없어 건너뜁니다", file=sys.stderr)
         return
 
-    result = sync.push(rows, names)
+    # 첫 화면 차트에 세울 스킬. Notion 이 막대를 상위 몇 개로 못 자르므로
+    # 여기서 골라 '핵심 부족 스킬' 열에 담아 보낸다.
+    featured = top_missing_skills(rows, names)
+    result = sync.push(rows, names, featured_skills=featured)
     print(f"\n[Notion] 신규 {result.created} · 갱신 {result.updated} · 실패 {result.failed}")
+    if featured:
+        print(f"[Notion] 첫 화면 스킬 — {', '.join(featured)}")
 
     # push 뒤에 한다. 오늘 결과에 든 행은 push 가 모집중으로 이미 썼다.
     retired = sync.retire(
@@ -611,7 +617,9 @@ def publish_courses(
             cache_days=config["detail_cache_days"],
         )
 
-        result = courses_sync.push(priced, skill_pages)
+        # 스킬을 돌아가며 골라야 한 스킬의 과정이 첫 화면을 다 먹지 않는다.
+        front = featured_courses(priced)
+        result = courses_sync.push(priced, skill_pages, featured=front)
         if priced:
             retired = courses_sync.retire(rec.key for rec in priced)
         else:
@@ -626,7 +634,7 @@ def publish_courses(
         return
 
     print(
-        f"[강의] 대상 스킬 {len(targets)}, 추천 {len(priced)},"
+        f"[강의] 대상 스킬 {len(targets)}, 추천 {len(priced)}, 첫 화면 {len(front)},"
         f" 신규 {result.created}, 갱신 {result.updated}, 지난 추천 {retired}, 실패 {result.failed}"
     )
 

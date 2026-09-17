@@ -90,6 +90,19 @@ class TestProperties:
         assert props["회사"]["select"]["name"] == "우아한형제들"
         assert props["URL"]["url"].startswith("https://")
 
+    def test_featured_skills_are_a_subset_of_the_missing_ones(self):
+        """첫 화면 차트는 상위 몇 개만 세운다. Notion 이 막대를 못 자르므로
+        자를 것을 여기서 잘라 보낸다(2026-09-17 확인)."""
+        props = build_properties(make_analyzed(), SKILL_NAMES,
+                                 featured_skills=("Apache Airflow", "Power BI"))
+        assert props["핵심 부족 스킬"] == {"multi_select": [{"name": "Apache Airflow"}]}
+        # 부족 스킬 자체는 그대로 둔다. 하위 페이지에서는 전부 봐야 한다.
+        assert [o["name"] for o in props["부족 스킬"]["multi_select"]] == ["Apache Airflow", "dbt"]
+
+    def test_featured_skills_are_empty_when_nothing_is_featured(self):
+        """빈 값을 보낸다. 속성을 빼면 어제 고른 막대가 그대로 남는다."""
+        assert build_properties(make_analyzed(), SKILL_NAMES)["핵심 부족 스킬"] == {"multi_select": []}
+
     def test_company_uses_whitelist_name_not_raw(self):
         """'쿠팡풀필먼트서비스'가 아니라 '쿠팡'으로 묶여야 집계가 된다."""
         company = Company(name="쿠팡", tier="대기업", segment="종합몰",
