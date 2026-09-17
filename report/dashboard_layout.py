@@ -30,8 +30,7 @@ from report.notion import OPEN
 
 VIEWS_API_VERSION = "2026-03-11"
 
-#: 새 공고 칩을 왼쪽에 둔다. 표가 단 하나를 쓰고 있어서 오른쪽 열은 잘린다.
-JOB_COLUMNS = ("우선순위", "새 공고", "회사", "공고명", "마감", "상태")
+JOB_COLUMNS = ("우선순위", "회사", "공고명", "마감", "상태")
 OWNED_COLUMNS = ("스킬", "분류", "근거", "요구 공고 수")
 GAP_COLUMNS = ("스킬", "요구 공고 수", "요구 회사", "분류")
 

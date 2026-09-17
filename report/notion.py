@@ -21,7 +21,6 @@ import os
 import sys
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Collection, Iterable, Iterator, Mapping, Protocol
 
 from analyze.gap import AnalyzedPosting
@@ -45,7 +44,7 @@ _MAX_OPTIONS = 100
 
 
 class NotionClient(Protocol):
-    def find_page(self, key: str) -> "ExistingPage | None": ...
+    def find_page_id(self, key: str) -> str | None: ...
     def create_page(self, properties: Mapping[str, Any]) -> str: ...
     def update_page(self, page_id: str, properties: Mapping[str, Any]) -> None: ...
     def iter_rows(self) -> Iterator[tuple[str, str, str | None]]: ...
@@ -95,44 +94,6 @@ def listing_status(
     return None
 
 
-#: '새 공고' 칩. Notion 에는 조건부 서식이 없어서(행 색을 조건으로 못 바꾼다)
-#: 색이 나오는 자리는 select 옵션 색뿐이다. 새로 들어온 행에만 값을 넣는다.
-NEW = "NEW"
-
-#: 칩을 며칠 달아 둘지. 매일 들여다보지 않아도 주말치가 보이게 사흘이다.
-NEW_DAYS = 3
-
-_KST = timezone(timedelta(hours=9))
-
-
-@dataclass(frozen=True, slots=True)
-class ExistingPage:
-    """이미 있는 행. 언제 생겼는지까지 알아야 '새 공고' 를 가릴 수 있다."""
-
-    page_id: str
-    created_at: str
-
-
-def new_window_start(run_date: str, *, days: int = NEW_DAYS) -> str:
-    """오늘 포함 며칠치를 '새 공고' 로 볼지, 그 시작 날짜를 준다."""
-    return (datetime.fromisoformat(run_date).date() - timedelta(days=days - 1)).isoformat()
-
-
-def is_new(created_at: str, since: str | None) -> bool:
-    """Notion 이 준 생성 시각(UTC)을 한국 날짜로 보고 창 안인지 본다.
-
-    시각을 못 읽으면 새 공고가 아니라고 본다. 칩을 잘못 다는 것보다 안 다는
-    쪽이 낫다. 어차피 다음 실행에서 다시 판단한다.
-    """
-    if not since or not created_at:
-        return False
-    try:
-        moment = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    return moment.astimezone(_KST).date().isoformat() >= since
-
-
 def _text(value: str) -> dict[str, Any]:
     return {"rich_text": [{"text": {"content": value[:2000]}}]}
 
@@ -163,7 +124,6 @@ def build_properties(
     *,
     for_update: bool = False,
     featured_skills: Collection[str] = (),
-    is_new: bool = False,
 ) -> dict[str, Any]:
     """분석 결과 한 건을 Notion 속성으로 옮긴다.
 
@@ -188,8 +148,6 @@ def build_properties(
         "보유 스킬": _options(gap.labeled(skill_names, "matched")),
         "부족 스킬": _options(missing),
         "핵심 부족 스킬": _options(n for n in missing if n in featured_skills),
-        # 빠졌으면 빈 값을 보낸다. 속성을 빼면 사흘 전 칩이 그대로 남는다.
-        "새 공고": _choice(NEW) if is_new else {"select": None},
         "어필 경험": _options(m.name for m in analyzed.experiences),
         "어필 포인트": _text(analyzed.pitch),
         "URL": {"url": posting.url},
@@ -247,7 +205,7 @@ class HttpNotionClient:
     def _request(self, method: str, path: str, body: Mapping[str, Any]) -> Mapping[str, Any]:
         return notion_request(self._token, method, path, body, opener=self._opener)
 
-    def find_page(self, key: str) -> ExistingPage | None:
+    def find_page_id(self, key: str) -> str | None:
         payload = self._request(
             "POST",
             f"/databases/{self._database_id}/query",
@@ -257,9 +215,7 @@ class HttpNotionClient:
             },
         )
         results = payload.get("results") or ()
-        if not results:
-            return None
-        return ExistingPage(page_id=results[0]["id"], created_at=results[0].get("created_time", ""))
+        return results[0]["id"] if results else None
 
     def create_page(self, properties: Mapping[str, Any]) -> str:
         payload = self._request(
@@ -316,7 +272,6 @@ class NotionSync:
         skill_names: Mapping[str, str],
         *,
         featured_skills: Collection[str] = (),
-        new_since: str | None = None,
     ) -> SyncResult:
         created = updated = failed = 0
         seen: set[str] = set()
@@ -330,19 +285,18 @@ class NotionSync:
                 continue
             seen.add(key)
             try:
-                found = self.client.find_page(key)
-                if found:
+                page_id = self.client.find_page_id(key)
+                if page_id:
                     self.client.update_page(
-                        found.page_id,
+                        page_id,
                         build_properties(analyzed, skill_names, for_update=True,
-                                         featured_skills=featured_skills,
-                                         is_new=is_new(found.created_at, new_since)),
+                                         featured_skills=featured_skills),
                     )
                     updated += 1
                 else:
-                    # 방금 만든 행은 언제나 새 공고다.
-                    self.client.create_page(build_properties(
-                        analyzed, skill_names, featured_skills=featured_skills, is_new=True))
+                    self.client.create_page(
+                        build_properties(analyzed, skill_names, featured_skills=featured_skills)
+                    )
                     created += 1
             except (OSError, ValueError, KeyError) as exc:
                 failed += 1

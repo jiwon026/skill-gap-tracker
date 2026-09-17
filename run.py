@@ -75,7 +75,7 @@ from extract.relevance import RelevanceDict, classify
 from extract.seniority import SeniorityRule, is_entry_level, years_from_requirements
 from extract.skills import SkillDict, extract_skills
 from report.dashboard import DashboardSync, summarize
-from report.notion import NotionSync, new_window_start
+from report.notion import NotionSync
 
 ROOT = Path(__file__).parent
 KST = timezone(timedelta(hours=9))
@@ -434,8 +434,7 @@ def publish(
     # 첫 화면 차트에 세울 스킬. Notion 이 막대를 상위 몇 개로 못 자르므로
     # 여기서 골라 '핵심 부족 스킬' 열에 담아 보낸다.
     featured = top_missing_skills(rows, names)
-    result = sync.push(rows, names, featured_skills=featured,
-                       new_since=new_window_start(run_date))
+    result = sync.push(rows, names, featured_skills=featured)
     print(f"\n[Notion] 신규 {result.created} · 갱신 {result.updated} · 실패 {result.failed}")
     if featured:
         print(f"[Notion] 첫 화면 스킬 — {', '.join(featured)}")
