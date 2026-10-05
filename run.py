@@ -37,7 +37,8 @@ from report.course_notion import CourseSync
 #: 저장소에 넣지 않는 개인용 수집기를 두는 패키지(.gitignore). 모듈마다
 #: DEFAULT_SPEC, fetch_payload(spec, cache), parse_board, LABEL 을 갖고,
 #: payload["complete"] 로 목록을 끝까지 봤는지 알린다. 선택 속성:
-#: EXHAUSTIVE(목록이 전체인가), fetch_company(company_id)(규모 조회).
+#: EXHAUSTIVE(목록이 전체인가), fetch_company(company_id)(규모 조회),
+#: EXPERIMENT_SPECS({이름: spec}, 본 파이프라인 밖의 측정용 수집. collect_experiments),
 #: 모듈 이름이 곧 Posting.source 다.
 LOCAL_PACKAGE = "collect.local"
 
@@ -276,11 +277,13 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
     region = RegionRule.from_config(_config("region.yaml"))
 
     by_company: dict[str, list[Posting]] = {}
+    skipped_role = 0
     skipped_senior = 0
     skipped_region = 0
     for posting in postings:
         verdict = classify(posting.title, posting.departments, relevance)
         if not verdict.relevant:
+            skipped_role += 1
             continue
         if not in_region(posting.title, posting.location, region):
             skipped_region += 1
@@ -298,10 +301,16 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
             continue
         by_company.setdefault(posting.company, []).append(posting)
 
-    if skipped_senior:
-        print(f"  - 경력 요건이 맞지 않아 제외 {skipped_senior}건")
+    # 거르는 순서대로 찍는다. 다 빼면 분석 대상 수가 나와야 한다.
+    # 직무 무관이 셋 중 가장 크게 거른다(2026-09-17: 214건 중 166건).
+    # 이걸 안 세던 동안은 relevance.yaml 을 잘못 고쳐 멀쩡한 공고를
+    # 걸러내기 시작해도 로그가 그대로였다.
+    if skipped_role:
+        print(f"  - 직무가 맞지 않아 제외 {skipped_role}건")
     if skipped_region:
         print(f"  - 수도권이 아니어서 제외 {skipped_region}건")
+    if skipped_senior:
+        print(f"  - 경력 요건이 맞지 않아 제외 {skipped_senior}건")
 
     analyzed: list[AnalyzedPosting] = []
     for company_raw, rows in by_company.items():
@@ -667,6 +676,31 @@ def tidy_raw_cache(run_date: str) -> None:
         print(f"[원본] 지난 날 캐시 {packed}개를 압축했습니다")
 
 
+def collect_experiments(run_date: str, fetched_at: str) -> None:
+    """측정용 수집. 결과는 store/snapshots/experiments/ 에만 남긴다.
+
+    직군을 넓힐지 정하려면 그 직군 공고를 먼저 며칠 모아 봐야 한다. 본 수집기
+    spec 에 섞으면 상한(max_jobs)을 같이 써서, 상한에 걸린 날 소스 전체가
+    불완전으로 찍히고 마감 판정이 멈춘다. 그래서 캐시 이름도 스냅샷 폴더도
+    따로 두고, 분석과 Notion 에는 넣지 않는다. 시장 분석은
+    store/snapshots/*.jsonl 만 세므로 하위 폴더는 섞이지 않는다.
+
+    뒷정리처럼 실패해도 실행을 막지 않는다.
+    """
+    for module in _local_sources():
+        for name, spec in (getattr(module, "EXPERIMENT_SPECS", None) or {}).items():
+            label = f"{_source_name(module)}-{name}"
+            try:
+                payload = module.fetch_payload(spec, _raw_cache(label, run_date))
+                result = module.parse_board(payload, spec, fetched_at=fetched_at)
+            except OSError as exc:
+                print(f"  ! 측정 수집 실패 ({label}): {exc}", file=sys.stderr)
+                continue
+            path = ROOT / "store" / "snapshots" / "experiments" / f"{label}-{run_date}.jsonl"
+            count = write_snapshot(result.postings, path)
+            print(f"[측정] {label} {count}건 → {path.relative_to(ROOT)}")
+
+
 def main() -> int:
     _force_utf8_output()
     run_date = datetime.now(KST).date().isoformat()
@@ -695,6 +729,7 @@ def main() -> int:
         complete_sources=complete_sources,
         run_date=run_date,
     )
+    collect_experiments(run_date, fetched_at)
     return 0
 
 

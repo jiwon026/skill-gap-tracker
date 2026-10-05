@@ -7,6 +7,7 @@
 
 여기서 지키는 것은 계층 자체가 아니라 조립 순서다.
 """
+import re
 from datetime import date
 
 import pytest
@@ -183,6 +184,41 @@ class TestEmptyInput:
 
     def test_postings_with_no_data_role_yield_nothing(self):
         assert run.analyze([posting("1", "영업관리", "<p>영업 경험</p>")]) == ()
+
+
+class TestFilterLog:
+    """어느 규칙이 얼마나 걸렀는지 매 실행 보여야 한다.
+
+    직무 무관은 세 필터 중 가장 크게 거른다(2026-09-17 실측: 214건 중 166건).
+    그런데 오래도록 세지도 찍지도 않아서, 로그의 제외 건수를 다 더해도 분석
+    대상 수가 안 나왔다. 규칙을 잘못 고쳐 멀쩡한 공고를 걸러내기 시작해도
+    로그에는 아무 변화가 없었다.
+    """
+
+    def test_off_target_roles_are_counted(self, capsys):
+        run.analyze([
+            posting("1", "데이터 분석가", "<p>SQL 경험</p>"),
+            posting("2", "영업관리", "<p>영업 경험</p>"),
+            posting("3", "주방 보조", "<p>조리 경험</p>"),
+        ])
+        assert "직무가 맞지 않아 제외 2건" in capsys.readouterr().out
+
+    def test_nothing_filtered_says_nothing(self, capsys):
+        run.analyze([posting("1", "데이터 분석가", "<p>SQL 경험</p>")])
+        assert "제외" not in capsys.readouterr().out
+
+    def test_the_counts_add_up_to_what_is_analyzed(self, capsys):
+        """제외 건수를 다 빼면 분석 대상이 나와야 한다. 이게 안 맞으면
+        어딘가에서 조용히 빠지는 필터가 있다는 뜻이다."""
+        postings = [
+            posting("1", "데이터 분석가", "<p>SQL 경험</p>"),
+            posting("2", "영업관리", "<p>영업 경험</p>"),
+            posting("3", "데이터 분석가", "<p>SQL 경험</p>"),
+        ]
+        rows = run.analyze(postings)
+        out = capsys.readouterr().out
+        excluded = sum(int(m) for m in re.findall(r"제외 (\d+)건", out))
+        assert len(postings) - excluded == len(rows)
 
 
 class TestCompleteSources:
@@ -528,6 +564,70 @@ DEFAULT_TRAINING_CFG = dict(
     list_cache_days=7, detail_cache_days=30,
     metro_prefixes=["서울"], exclude_targets=[], exclude_title_words=[],
 )
+
+
+class TestCollectExperiments:
+    """측정용 수집은 본 파이프라인과 섞이지 않는다.
+
+    직군을 넓힐지 정하려면 그 직군 공고를 먼저 모아 봐야 한다. 그런데 본 수집기의
+    상한(max_jobs)을 같이 쓰면 상한에 걸린 날 그 소스 전체가 불완전으로 찍혀
+    마감 판정이 멈춘다. 그래서 캐시도 스냅샷도 따로 두고, 분석과 Notion 에는
+    넣지 않는다.
+    """
+
+    def _module(self, *, specs, fail=False):
+        from types import SimpleNamespace
+        calls = []
+
+        def fetch_payload(spec, cache_path):
+            calls.append(cache_path)
+            if fail:
+                raise OSError("API 가 응답하지 않습니다")
+            return {"spec": spec}
+
+        def parse_board(payload, spec, *, fetched_at):
+            return SimpleNamespace(postings=[posting(f"m-{spec}", "CRM 마케터", "<p>SQL</p>")])
+
+        module = SimpleNamespace(__name__="collect.local.board", EXPERIMENT_SPECS=specs,
+                                 fetch_payload=fetch_payload, parse_board=parse_board)
+        return module, calls
+
+    def test_each_spec_gets_its_own_snapshot_and_cache(self, tmp_path, monkeypatch, capsys):
+        module, calls = self._module(specs={"marketing": "crm"})
+        monkeypatch.setattr(run, "ROOT", tmp_path)
+        monkeypatch.setattr(run, "_local_sources", lambda: [module])
+
+        run.collect_experiments("2026-09-18", "2026-09-18T10:00:00+09:00")
+
+        snap = tmp_path / "store" / "snapshots" / "experiments" / "board-marketing-2026-09-18.jsonl"
+        assert snap.exists() and len(snap.read_text(encoding="utf-8").splitlines()) == 1
+        # 본 수집기 캐시(board-날짜)와 겹치지 않는 이름이어야 한다
+        assert calls == [tmp_path / "store" / "raw" / "board-marketing-2026-09-18.json"]
+        assert "[측정] board-marketing 1건" in capsys.readouterr().out
+
+    def test_the_main_snapshot_folder_is_not_touched(self, tmp_path, monkeypatch):
+        """시장 분석은 store/snapshots/*.jsonl 만 센다. 측정 공고가 섞이면
+        README 의 674건 같은 통계가 조용히 바뀐다."""
+        module, _ = self._module(specs={"marketing": "crm"})
+        monkeypatch.setattr(run, "ROOT", tmp_path)
+        monkeypatch.setattr(run, "_local_sources", lambda: [module])
+        run.collect_experiments("2026-09-18", "2026-09-18T10:00:00+09:00")
+        assert list((tmp_path / "store" / "snapshots").glob("*.jsonl")) == []
+
+    def test_modules_without_experiments_are_skipped(self, tmp_path, monkeypatch, capsys):
+        from types import SimpleNamespace
+        monkeypatch.setattr(run, "ROOT", tmp_path)
+        monkeypatch.setattr(run, "_local_sources",
+                            lambda: [SimpleNamespace(__name__="collect.local.plain")])
+        run.collect_experiments("2026-09-18", "2026-09-18T10:00:00+09:00")
+        assert capsys.readouterr().out == ""
+
+    def test_a_failure_is_reported_not_raised(self, tmp_path, monkeypatch, capsys):
+        module, _ = self._module(specs={"marketing": "crm"}, fail=True)
+        monkeypatch.setattr(run, "ROOT", tmp_path)
+        monkeypatch.setattr(run, "_local_sources", lambda: [module])
+        run.collect_experiments("2026-09-18", "2026-09-18T10:00:00+09:00")
+        assert "API 가 응답하지 않습니다" in capsys.readouterr().err
 
 
 class TestTidyRawCache:
