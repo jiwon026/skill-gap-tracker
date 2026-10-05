@@ -217,3 +217,61 @@ def test_general_postings_that_also_accept_the_track_stay(title, dictionary):
     """'병역특례 가능'은 누구나 지원하는 일반 공고에 붙는 말이다. 단어만 보고
     거르면 지원할 수 있는 공고가 사라진다. 태그 형태만 제외한다."""
     assert classify(title, (), dictionary).relevant
+
+
+class TestTargetCompanyTracks:
+    """대상 회사 공고에서만 통과시키는 직무(`target`).
+
+    신입은 '데이터 분석가'가 아니라 공채 사업 직무로 뽑는 회사가 많다. 그렇다고
+    마케팅, SCM 을 모든 회사에 열면 전 산업의 마케터 공고가 쏟아진다. 그래서
+    지원 대상 회사일 때만 연다. 판정은 여전히 제목과 부서만 본다.
+    """
+
+    def test_tracks_pass_only_for_target_companies(self, dictionary):
+        departments = ("MD", "마케팅", "디자인")
+        assert classify("2026 하반기 신입사원 채용 #공채", departments, dictionary, target=True).relevant
+        assert classify("2026 하반기 신입사원 채용 #공채", departments, dictionary).relevant is False
+
+    @pytest.mark.parametrize(
+        "title, departments",
+        [
+            ("2026 하반기 신입사원 채용", ("SCM", "재무")),
+            ("2026 하반기 신입사원 채용", ("퍼포먼스 마케터",)),
+            ("CRM 마케팅 담당자 (신입)", ()),
+            ("2026 하반기 커머스부문 신입사원 채용", ("일반MD", "데이터 엔지니어")),
+            ("Data Engineer (신입)", ()),
+        ],
+    )
+    def test_target_tracks(self, title, departments, dictionary):
+        verdict = classify(title, departments, dictionary, target=True)
+        assert verdict.relevant, verdict
+
+    def test_an_exclusion_inside_the_track_is_waived(self, dictionary):
+        """'데이터 엔지니어'는 제외어 '엔지니어'를 품고 있다. 대상 회사면 그 제외는 면제다."""
+        verdict = classify("데이터 엔지니어 (신입)", (), dictionary, target=True)
+        assert verdict.matched == ("데이터 엔지니어",)
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Analytics Engineer",      # 트랙 밖의 엔지니어
+            "SCM 엔지니어",             # 엔지니어는 SCM 이 잡은 범위 밖이다
+            "마케팅 인재풀",            # 상시 더미 항목은 대상 회사여도 뺀다
+            "[병역특례] 데이터 엔지니어",
+            "운영지원(배민상회 정산/SCM)",  # 운영직은 넓히지 않는다(2026-09-21)
+            "[어시스턴트] 그로스 마케팅 업무 운영 지원 채용",
+            "[어시스턴트] 오프라인 결제 마케팅 업무 지원 채용",  # 업무 보조직
+            "Marketing Design Assistant (인턴)",  # 디자인 직무
+        ],
+    )
+    def test_other_exclusions_still_win(self, title, dictionary):
+        assert classify(title, (), dictionary, target=True).relevant is False
+
+    def test_excluded_department_is_still_dropped_for_targets(self, dictionary):
+        verdict = classify("2026 공채", ("Backend개발", "SCM"), dictionary, target=True)
+        assert verdict.matched == ("SCM",)
+
+    def test_non_target_postings_keep_the_old_rules(self, dictionary):
+        """대상 회사가 아니면 예전과 똑같다. 데이터 엔지니어는 여전히 제외."""
+        assert classify("데이터 엔지니어 (신입)", (), dictionary).relevant is False
+        assert classify("2026 공채", ("SCM",), dictionary).relevant is False

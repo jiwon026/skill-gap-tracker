@@ -137,6 +137,42 @@ class TestFiltering:
         assert len(run.analyze([open_to_juniors])) == 1
 
 
+class TestTargetCompanyTracks:
+    """대상 회사 공고에서만 마케팅, SCM, 데이터 엔지니어를 연다(2026-09-21).
+
+    회사를 알아보는 일이 직군 판정보다 먼저여야 한다. 거꾸로면 대상 회사
+    공채가 직군 필터에서 먼저 버려진다.
+    """
+
+    def _gongchae(self, source_id, company):
+        import dataclasses
+
+        return dataclasses.replace(
+            posting(source_id, "2026 하반기 신입사원 채용 #공채", "<p>세부 직무별 모집</p>", company=company),
+            departments=("MD", "SCM", "디자인"),
+        )
+
+    def test_target_company_tracks_pass(self):
+        rows = run.analyze([self._gongchae("1", "쿠팡"), self._gongchae("2", "테스트커머스")])
+        assert [r.posting.source_id for r in rows] == ["1"]
+        assert rows[0].company.name == "쿠팡"
+
+    def test_entry_level_data_engineer_at_a_target_company(self):
+        rows = run.analyze([
+            posting("1", "데이터 엔지니어 (신입)", "<p>SQL, Python 경험</p>", company="쿠팡"),
+            posting("2", "데이터 엔지니어 (신입)", "<p>SQL, Python 경험</p>"),
+        ])
+        assert [r.posting.source_id for r in rows] == ["1"]
+
+    def test_seniority_still_applies_to_tracks(self):
+        import dataclasses
+
+        senior = dataclasses.replace(
+            posting("1", "데이터 엔지니어", "<p>Spark</p>", company="쿠팡"), experience_min=5
+        )
+        assert run.analyze([senior]) == ()
+
+
 class TestOrdering:
 
     def test_more_matched_skills_ranks_higher_than_a_better_ratio(self):
@@ -920,3 +956,37 @@ class TestPublishCourses:
         out = capsys.readouterr()
         assert "[강의] 대상 스킬 0" in out.out
         assert "파일이 잠겨 있습니다" in out.err
+
+
+class TestTargetScan:
+    """대상 회사 신입 공고를 직무와 상관없이 따로 훑는 수집기(TARGET_SCAN).
+
+    수집기가 데이터 직무 분류로만 목록을 받으면, 사업 직무만으로 낸 대상 회사
+    공채는 처음부터 안 들어온다. 판정을 넓혀도 받아 온 적 없는 공고는 못
+    고른다. 대상 회사를 가르는 기준은 판정과 같은 companies.yaml 이어야 한다.
+    """
+
+    def _module(self, *, target_scan):
+        from types import SimpleNamespace
+        seen = {}
+
+        def fetch_payload(spec, cache_path, **kwargs):
+            seen.update(kwargs)
+            return {"complete": True}
+
+        attrs = {"TARGET_SCAN": True} if target_scan else {}
+        module = SimpleNamespace(__name__="collect.local.board", DEFAULT_SPEC="spec",
+                                 fetch_payload=fetch_payload, **attrs)
+        return module, seen
+
+    def test_scanning_sources_get_the_company_rule(self, tmp_path):
+        module, seen = self._module(target_scan=True)
+        run._fetch_local(module, tmp_path / "board.json")
+        is_target = seen["is_target"]
+        assert is_target("쿠팡풀필먼트서비스", "2026 하반기 신입 공채")
+        assert not is_target("테스트커머스", "2026 하반기 신입 공채")
+
+    def test_other_sources_keep_the_old_call(self, tmp_path):
+        module, seen = self._module(target_scan=False)
+        run._fetch_local(module, tmp_path / "board.json")
+        assert seen == {}

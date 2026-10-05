@@ -39,6 +39,8 @@ from report.course_notion import CourseSync
 #: payload["complete"] 로 목록을 끝까지 봤는지 알린다. 선택 속성:
 #: EXHAUSTIVE(목록이 전체인가), fetch_company(company_id)(규모 조회),
 #: EXPERIMENT_SPECS({이름: spec}, 본 파이프라인 밖의 측정용 수집. collect_experiments),
+#: TARGET_SCAN(대상 회사 공고를 직무와 상관없이 더 받는다. fetch_payload 가
+#: is_target(회사명, 제목) 을 받는다. _fetch_local).
 #: 모듈 이름이 곧 Posting.source 다.
 LOCAL_PACKAGE = "collect.local"
 
@@ -68,7 +70,7 @@ from collect import company_cache
 from collect.schema import CompanyProfile, Posting, is_notice
 from collect.snapshot import write_snapshot
 from extract.boilerplate import find_boilerplate, strip_boilerplate
-from extract.companies import CompanyBook
+from extract.companies import Company, CompanyBook
 from extract.company_size import classify_size
 from extract.experience import ExperienceBook, match_experiences
 from extract.normalize import to_segments
@@ -177,7 +179,7 @@ def collect(run_date: str, fetched_at: str) -> tuple[tuple[Posting, ...], frozen
     for module in local_modules:
         name, label = _source_name(module), getattr(module, "LABEL", _source_name(module))
         try:
-            payload = module.fetch_payload(module.DEFAULT_SPEC, _raw_cache(name, run_date))
+            payload = _fetch_local(module, _raw_cache(name, run_date))
         except OSError as exc:
             print(f"  ! {label}: 수집 실패, 건너뜁니다 — {exc}", file=sys.stderr)
             outcomes.append((name, False, 0))
@@ -208,6 +210,23 @@ def collect(run_date: str, fetched_at: str) -> tuple[tuple[Posting, ...], frozen
             _report_source(f"사람인 '{spec.keyword}'", result)
 
     return _dedupe(collected), _complete_sources(outcomes, _exhaustive(local_modules))
+
+
+def _fetch_local(module: ModuleType, cache_path: Path) -> Mapping[str, Any]:
+    """개인용 수집기 하나의 원본을 받는다.
+
+    TARGET_SCAN 수집기에는 대상 회사 판별을 넘긴다. 데이터 직무 분류로만 목록을
+    받으면 사업 직무만으로 낸 대상 회사 공채가 처음부터 안 들어온다. 판별 기준은
+    analyze 와 같은 companies.yaml 이어야 수집과 판정이 다른 회사를 보지 않는다.
+    """
+    if not getattr(module, "TARGET_SCAN", False):
+        return module.fetch_payload(module.DEFAULT_SPEC, cache_path)
+    book = CompanyBook.from_config(_config("companies.yaml"))
+
+    def is_target(company: str, title: str) -> bool:
+        return book.identify(company, title=title) is not None
+
+    return module.fetch_payload(module.DEFAULT_SPEC, cache_path, is_target=is_target)
 
 
 def _dedupe(postings: Iterable[Posting]) -> tuple[Posting, ...]:
@@ -277,11 +296,19 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
     region = RegionRule.from_config(_config("region.yaml"))
 
     by_company: dict[str, list[Posting]] = {}
+    # 회사를 직군 판정보다 먼저 알아본다. 대상 회사 공고에서만 여는 직무
+    # (relevance.yaml 의 target)가 있어서다. 제목을 함께 넘기는 것은 법인명만으로
+    # 부문을 모르는 회사가 있기 때문이다(companies.yaml 의 divisions).
+    companies: dict[str, Company | None] = {}
     skipped_role = 0
     skipped_senior = 0
     skipped_region = 0
     for posting in postings:
-        verdict = classify(posting.title, posting.departments, relevance)
+        company = book.identify(posting.company, title=posting.title)
+        companies[posting.key] = company
+        verdict = classify(
+            posting.title, posting.departments, relevance, target=company is not None
+        )
         if not verdict.relevant:
             skipped_role += 1
             continue
@@ -315,7 +342,6 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
     analyzed: list[AnalyzedPosting] = []
     for company_raw, rows in by_company.items():
         boilerplate = boilerplate_by_company.get(company_raw, frozenset())
-        company = book.identify(company_raw)
 
         for posting in rows:
             segments = segments_by_key[posting.key]
@@ -324,7 +350,7 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
             analyzed.append(
                 AnalyzedPosting(
                     posting=posting,
-                    company=company,
+                    company=companies[posting.key],
                     gap=compute_gap(required, owned),
                     experiences=match_experiences(posting.title, text, experience_book),
                 )

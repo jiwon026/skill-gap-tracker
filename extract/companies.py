@@ -8,6 +8,10 @@
 별칭 매칭 규칙은 스킬 사전과 공유한다(`extract.matching`). 짧은 영문
 별칭(CLS, SSG)이 다른 단어 안에서 잡히는 것을 막는 것이 여기서 제일
 중요하다 — 한 번 잘못 묶이면 전혀 다른 회사가 타겟 목록에 올라온다.
+
+**회사명만으로 부문을 모르는 경우가 있다.** 한 법인이 부문별로 공채를 따로 낸다
+(커머스부문, 엔터테인먼트부문). 법인명을 별칭에 넣으면 대상이 아닌 부문까지
+딸려 오므로, `divisions` 로 '이 법인명이면서 제목에 이 말이 있으면'을 적는다.
 """
 from __future__ import annotations
 
@@ -27,6 +31,8 @@ class Company:
     tier: str
     segment: str
     matcher: re.Pattern[str]
+    #: (법인명, 제목) 짝. 둘 다 걸려야 이 회사다.
+    divisions: tuple[tuple[re.Pattern[str], re.Pattern[str]], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +61,19 @@ class CompanyBook:
             if not aliases:
                 raise ValueError(f"{name}: aliases 가 최소 하나는 있어야 합니다")
 
+            divisions = []
+            for division in entry.get("divisions") or ():
+                company_alias = str(division.get("company", "")).strip()
+                title_word = str(division.get("title", "")).strip()
+                if not company_alias or not title_word:
+                    raise ValueError(f"{name}: divisions 항목에는 company 와 title 이 모두 있어야 합니다")
+                divisions.append(
+                    (
+                        re.compile(alias_to_pattern(company_alias), re.IGNORECASE),
+                        re.compile(alias_to_pattern(title_word), re.IGNORECASE),
+                    )
+                )
+
             companies.append(
                 Company(
                     name=name,
@@ -63,6 +82,7 @@ class CompanyBook:
                     matcher=re.compile(
                         "|".join(alias_to_pattern(a) for a in aliases), re.IGNORECASE
                     ),
+                    divisions=tuple(divisions),
                 )
             )
 
@@ -87,16 +107,27 @@ class CompanyBook:
                     raise ValueError(f"별칭 중복: {alias!r} — {owner[key]} 와 {name}")
                 owner[key] = name
 
-    def identify(self, raw_name: str) -> Company | None:
+    def identify(self, raw_name: str, *, title: str = "") -> Company | None:
         """공고의 회사명 표기를 화이트리스트 항목으로 옮긴다.
 
         먼저 걸린 것을 쓴다. 별칭이 겹치는 회사를 만들지 않는 것은
-        설정 파일의 책임이다.
+        설정 파일의 책임이다. 별칭으로 못 찾으면 `divisions` 를 제목과 함께 본다.
         """
         text = (raw_name or "").strip()
         if not text:
             return None
-        return next((c for c in self.companies if c.matcher.search(text)), None)
+        found = next((c for c in self.companies if c.matcher.search(text)), None)
+        if found or not title:
+            return found
+        return next(
+            (
+                c
+                for c in self.companies
+                for company_part, title_part in c.divisions
+                if company_part.search(text) and title_part.search(title)
+            ),
+            None,
+        )
 
     def tier_rank(self, tier: str | None) -> int:
         """정렬 키. 목록 밖(None)은 항상 뒤로 간다."""

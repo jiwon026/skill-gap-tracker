@@ -110,3 +110,45 @@ def test_personal_config_has_no_overlapping_aliases():
     """실제 목록이 이 규칙을 지키는지 — 회사가 늘어날 때마다 여기서 걸린다.
     겹치면 from_config 가 예외를 낸다."""
     assert _load(PERSONAL).companies
+
+
+class TestDivisions:
+    """회사명만으로는 부문을 모를 때 제목으로 가른다.
+
+    한 법인이 부문별로 공채를 따로 낸다. 법인명을 별칭에 그냥 넣으면 대상이
+    아닌 부문까지 대상 회사로 딸려 온다.
+    """
+
+    @pytest.fixture
+    def book(self):
+        return CompanyBook.from_config(
+            {
+                "companies": [
+                    {
+                        "name": "홈쇼핑",
+                        "tier": "대기업",
+                        "aliases": ["홈쇼핑몰"],
+                        "divisions": [{"company": "미디어그룹", "title": "커머스"}],
+                    },
+                ]
+            }
+        )
+
+    def test_division_is_recognised_from_the_title(self, book):
+        company = book.identify("미디어그룹", title="2026년 하반기 커머스부문 신입사원 채용")
+        assert company is not None and company.name == "홈쇼핑"
+
+    def test_other_divisions_of_the_same_company_stay_out(self, book):
+        assert book.identify("미디어그룹", title="2026년 하반기 엔터테인먼트부문 신입사원 채용") is None
+
+    def test_without_a_title_the_division_is_unknown(self, book):
+        assert book.identify("미디어그룹") is None
+
+    def test_aliases_still_work_without_a_title(self, book):
+        assert book.identify("홈쇼핑몰").name == "홈쇼핑"
+
+    def test_a_division_needs_both_fields(self):
+        with pytest.raises(ValueError, match="divisions"):
+            CompanyBook.from_config(
+                {"companies": [{"name": "a", "tier": "대기업", "aliases": ["a"], "divisions": [{"company": "b"}]}]}
+            )
