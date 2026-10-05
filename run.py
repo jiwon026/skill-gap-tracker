@@ -392,7 +392,11 @@ def attach_company_sizes(
     fetchers: Mapping[str, Callable[[str], CompanyProfile | None]] | None = None,
     cache_dir: Path | None = None,
 ) -> tuple[AnalyzedPosting, ...]:
-    """화이트리스트 밖 회사의 규모를 소스 회사 정보로 채운다.
+    """규모를 모르는 회사를 소스 회사 정보로 채운다.
+
+    화이트리스트 밖 회사와, 화이트리스트에 있지만 tier 를 적지 않은 회사가
+    대상이다. 후자는 이커머스 밖 플랫폼 회사를 대상에 넣으면서 생겼다
+    (2026-10-05). 지원 대상인 것과 규모를 아는 것은 다른 문제다.
 
     분석이 끝난 공고만 묻는다. 수집한 공고 전부의 회사를 물으면 하루 수백
     건이 되는데, 규모가 필요한 것은 Notion 에 오르는 십여 건뿐이다. 우선순위와
@@ -405,7 +409,7 @@ def attach_company_sizes(
     pending: dict[str, list[str]] = {}
     for row in rows:
         source, company_id = row.posting.source, row.posting.company_id
-        if row.company is None and company_id and source in fetchers:
+        if (row.company is None or not row.company.tier) and company_id and source in fetchers:
             pending.setdefault(source, []).append(company_id)
 
     sizes: dict[tuple[str, str], str] = {}

@@ -152,3 +152,40 @@ class TestDivisions:
             CompanyBook.from_config(
                 {"companies": [{"name": "a", "tier": "대기업", "aliases": ["a"], "divisions": [{"company": "b"}]}]}
             )
+
+
+class TestTierIsOptional:
+    """규모를 모르는 회사도 지원 대상으로 둘 수 있어야 한다(2026-10-05).
+
+    이커머스 밖 플랫폼 회사까지 대상을 넓히면서 생긴 요구다. tier 를 적으면
+    그 값이 '규모' 열이 되는데, 모르는 회사에 중견이라고 적으면 화면이
+    거짓말을 한다. 적지 않으면 소스 회사 정보가 규모를 판단한다.
+    """
+
+    @pytest.fixture
+    def book(self):
+        return CompanyBook.from_config(
+            {
+                "companies": [
+                    {"name": "큰회사", "tier": "대기업", "aliases": ["큰회사"]},
+                    {"name": "모르는규모", "aliases": ["모르는규모"]},
+                ]
+            }
+        )
+
+    def test_a_company_without_a_tier_is_still_a_target(self, book):
+        company = book.identify("모르는규모")
+        assert company is not None and company.tier is None
+
+    def test_a_known_tier_still_works(self, book):
+        assert book.identify("큰회사").tier == "대기업"
+
+    def test_an_unknown_tier_value_is_still_rejected(self):
+        with pytest.raises(ValueError, match="알 수 없는 tier"):
+            CompanyBook.from_config({"companies": [{"name": "a", "tier": "소기업", "aliases": ["a"]}]})
+
+    def test_small_tiers_are_allowed_and_sort_after_the_big_ones(self, book):
+        from extract.companies import TIER_ORDER
+
+        assert TIER_ORDER.index("중견") < TIER_ORDER.index("중소") < TIER_ORDER.index("스타트업")
+        assert book.tier_rank("스타트업") < book.tier_rank(None)

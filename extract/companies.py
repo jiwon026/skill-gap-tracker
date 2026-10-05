@@ -21,14 +21,16 @@ from typing import Any, Iterable, Mapping
 
 from extract.matching import alias_to_pattern
 
-#: 리포트 정렬 순서. 목록에 없는 회사는 맨 뒤로 간다.
-TIER_ORDER = ("대기업", "중견")
+#: 리포트 정렬 순서. 목록에 없는 회사와 규모를 적지 않은 회사는 맨 뒤로 간다.
+TIER_ORDER = ("대기업", "중견", "중소", "스타트업")
 
 
 @dataclass(frozen=True, slots=True)
 class Company:
     name: str
-    tier: str
+    #: 없으면 '모른다'는 뜻이다. 그때 규모 열은 소스 회사 정보가 채운다
+    #: (run.attach_company_sizes). 아는 척해서 화면이 거짓말하지 않게.
+    tier: str | None
     segment: str
     matcher: re.Pattern[str]
     #: (법인명, 제목) 짝. 둘 다 걸려야 이 회사다.
@@ -53,8 +55,8 @@ class CompanyBook:
                 raise ValueError(f"중복 회사명: {name}")
             seen.add(name)
 
-            tier = str(entry.get("tier", "")).strip()
-            if tier not in TIER_ORDER:
+            tier = str(entry.get("tier", "")).strip() or None
+            if tier is not None and tier not in TIER_ORDER:
                 raise ValueError(f"{name}: 알 수 없는 tier — {tier!r}")
 
             aliases = [str(a).strip() for a in (entry.get("aliases") or ()) if str(a).strip()]

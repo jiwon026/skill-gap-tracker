@@ -63,7 +63,7 @@ class AnalyzedPosting:
     @property
     def scale(self) -> str:
         """Notion '규모'. 화이트리스트 tier 가 이긴다 — 사람이 정한 값이다."""
-        if self.company is not None:
+        if self.company is not None and self.company.tier:
             return self.company.tier
         return self.company_size or UNKNOWN
 

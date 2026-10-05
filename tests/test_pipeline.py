@@ -990,3 +990,48 @@ class TestTargetScan:
         module, seen = self._module(target_scan=False)
         run._fetch_local(module, tmp_path / "board.json")
         assert seen == {}
+
+
+class TestTargetCompanyWithoutTier:
+    """tier 를 안 적은 대상 회사는 규모를 소스에서 받아 온다(2026-10-05).
+
+    대상 회사라고 해서 규모를 아는 것은 아니다. 모르면 비워 두고, 화면에는
+    소스가 준 사실을 쓴다.
+    """
+
+    def _book(self, monkeypatch):
+        from extract.companies import CompanyBook
+
+        book = CompanyBook.from_config(
+            {"companies": [{"name": "플랫폼회사", "aliases": ["플랫폼회사"]}]}
+        )
+        monkeypatch.setattr(run.CompanyBook, "from_config", classmethod(lambda cls, config: book))
+
+    def test_scale_falls_back_to_the_source_profile(self, monkeypatch):
+        self._book(monkeypatch)
+        rows = run.analyze([
+            posting("1", "데이터 분석가", "<p>SQL 경험</p>", company="플랫폼회사", company_id="c1")
+        ])
+        assert rows[0].company is not None, "대상 회사로 인식되어야 한다"
+        from extract.company_size import UNKNOWN
+
+        assert rows[0].scale == UNKNOWN, "tier 가 없으면 소스 정보가 채우기 전까지는 모름"
+
+        filled = run.attach_company_sizes(
+            rows,
+            today=date(2026, 10, 5),
+            fetchers={"woowahan": lambda cid: CompanyProfile(size_class=None, headcount_max=120, founded_year=2015)},
+            cache_dir=None,
+        )
+        assert filled[0].scale == "중소"
+
+    def test_a_target_company_is_not_downgraded(self, monkeypatch):
+        from analyze.priority import assign_priority
+
+        self._book(monkeypatch)
+        rows = run.analyze([
+            posting("1", "데이터 분석가",
+                    "<h3>자격 요건</h3><ul><li>SQL</li><li>이탈 예측과 리텐션 분석</li></ul>",
+                    company="플랫폼회사")
+        ])
+        assert assign_priority(rows[0]) != "낮음"
