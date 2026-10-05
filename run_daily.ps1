@@ -19,9 +19,18 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $utf8 = New-Object System.Text.UTF8Encoding($false)   # BOM 없이
 
-# 스케줄러는 08:00 말고도 로그인, 절전 해제 때 이 파일을 부른다(놓친 실행 따라잡기).
+# 스케줄러는 정해진 시각 말고도 로그인, 절전 해제 때 이 파일을 부른다(놓친 실행 따라잡기).
 # 그래서 하루에 여러 번 불릴 수 있고, 오늘 성공한 실행이 있으면 로그도 남기지 않고
 # 끝낸다. 실패한 실행은 세지 않는다. 다음 기회에 다시 돌아야 하기 때문이다.
+#
+# 주말에는 돌지 않는다. 주말에 새로 올라오는 공고가 거의 없어서다. 평일 트리거만으로는
+# 막히지 않는다. 로그인, 절전 해제 트리거는 요일을 가리지 않고 이 파일을 부른다.
+# 월요일 실행이 주말 사이에 바뀐 것(새 공고, 마감)을 한 번에 따라잡는다.
+$weekday = (Get-Date).DayOfWeek
+if ($weekday -eq 'Saturday' -or $weekday -eq 'Sunday') {
+    exit 0
+}
+
 $today = Get-Date -Format 'yyyy-MM-dd'
 $doneToday = Get-ChildItem -Path $logDir -Filter "${today}_*.log" -ErrorAction SilentlyContinue |
     Where-Object { [System.IO.File]::ReadAllText($_.FullName, $utf8) -match '종료 코드 0\s*$' }

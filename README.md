@@ -179,11 +179,13 @@ cp config/companies.example.yaml  config/companies.yaml    # 지원 대상 회�
 .venv/Scripts/python run.py            # 파이프라인 전체
 ```
 
-Windows 작업 스케줄러에 매일 실행을 등록하려면:
+Windows 작업 스케줄러에 평일(월~금) 실행을 등록하려면:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 07:30
+powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 10:30
 ```
+
+주말에는 돌지 않습니다. 주말에 올라오는 공고가 거의 없어서, 월요일 실행이 주말 사이 변화를 한 번에 따라잡습니다.
 
 ### 대시보드 (선택)
 

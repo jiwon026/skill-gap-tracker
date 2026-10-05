@@ -1,14 +1,17 @@
-﻿# Skill Gap Tracker 일일 실행을 Windows 작업 스케줄러에 등록한다.
+﻿# Skill Gap Tracker 평일 실행을 Windows 작업 스케줄러에 등록한다.
+#
+# 월~금만 돈다. 주말에는 새 공고가 거의 없다. 따라잡기 트리거가 주말에 불러도
+# run_daily.ps1 이 요일을 보고 바로 끝낸다.
 #
 # 시간을 바꾸려면 -At 인자만 주면 된다:
-#     powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 07:30
+#     powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 10:30
 #
 # 관리자 권한이 필요 없다. 현재 사용자 계정으로 등록되므로 사용자 환경변수
 # (NOTION_TOKEN, SARAMIN_ACCESS_KEY)를 그대로 물려받는다. SYSTEM 계정으로
 # 등록하면 그 환경변수가 없어 조용히 아무것도 안 하게 된다.
 
 param(
-    [string]$At = '08:00',
+    [string]$At = '10:30',
     [string]$TaskName = 'JobGap 일일 수집'
 )
 
@@ -26,7 +29,8 @@ $action = New-ScheduledTaskAction `
     -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$script`"" `
     -WorkingDirectory $root
 
-$daily = New-ScheduledTaskTrigger -Daily -At $At
+$weekdays = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 `
+    -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At $At
 
 # 따라잡기 트리거 두 개. StartWhenAvailable 만으로는 부족하다. 모던 스탠바이
 # 절전에서 깨어난 PC가 이틀 연속 놓친 실행을 따라잡지 못했다(2026-09-13, 14).
@@ -61,7 +65,7 @@ $settings = New-ScheduledTaskSettingsSet `
 Register-ScheduledTask `
     -TaskName $TaskName `
     -Action $action `
-    -Trigger @($daily, $logon, $resume) `
+    -Trigger @($weekdays, $logon, $resume) `
     -Settings $settings `
     -Description '데이터 분석 채용공고 수집 → 직군·경력 필터 → 스킬 갭·경험 매칭 → Notion 적재' `
     -Force | Out-Null
@@ -73,6 +77,6 @@ Write-Host ''
 Write-Host "등록됨: $TaskName"
 Write-Host ("  상태      : " + $task.State)
 Write-Host ("  실행 계정 : " + $task.Principal.UserId)
-Write-Host ("  실행 시각 : 매일 " + $At + " (놓치면 로그인, 절전 해제 때 따라잡기)")
+Write-Host ("  실행 시각 : 평일 " + $At + " (놓치면 로그인, 절전 해제 때 따라잡기)")
 Write-Host ("  다음 실행 : " + $info.NextRunTime)
 Write-Host ("  스크립트  : " + $script)
