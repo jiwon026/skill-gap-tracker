@@ -190,7 +190,7 @@ skills:
     category: method
     aliases: [퍼널, funnel, 전환율, "conversion rate"]
   - id: retention
-    name: 리텐션·코호트
+    name: 리텐션 / 코호트
     category: method
     aliases: [리텐션, retention, 코호트, cohort, 재방문율]
   - id: ltv
