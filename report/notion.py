@@ -21,10 +21,12 @@ import os
 import sys
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable, Collection, Iterable, Iterator, Mapping, Protocol
 
 from analyze.gap import AnalyzedPosting
 from analyze.priority import assign_priority
+from collect.schema import Posting
 
 API_ROOT = "https://api.notion.com/v1"
 #: Notion은 버전을 헤더로 고정한다. 올리지 않으면 스키마가 갑자기 바뀌지 않는다.
@@ -118,6 +120,31 @@ def _options(labels: Iterable[str]) -> dict[str, Any]:
     return {"multi_select": [{"name": name} for name in seen[:_MAX_OPTIONS]]}
 
 
+def _posted_on(posted_at: str | None) -> str:
+    """'9/1' 처럼 짧게. 읽을 수 없는 값은 빈 문자열이다."""
+    try:
+        when = datetime.fromisoformat(str(posted_at))
+    except (TypeError, ValueError):
+        return ""
+    return f"{when.month}/{when.day}"
+
+
+def _closing(posting: Posting) -> str:
+    """'마감' 열에 쓸 문구.
+
+    마감 표시('상시채용', '채용시 마감')가 날짜보다 우선한다. 날짜가 없으면
+    **언제 올라온 공고인지가 유일한 단서**라서 게시일을 덧붙인다. 소스가
+    '채용시 마감' 공고를 두 달 가까이 목록에 두는 일이 있었다(2026-10-06:
+    회사 사이트에서는 내려간 공고가 캐치 목록에 8월 10일 자로 남아 있었다).
+    목록에 있는 공고를 마감으로 단정할 근거는 없으니, 판단할 재료를 준다.
+    """
+    note = posting.deadline_note or ""
+    if note:
+        posted = _posted_on(posting.posted_at)
+        return f"{note} ({posted} 게시)" if posted else note
+    return posting.deadline or ""
+
+
 def build_properties(
     analyzed: AnalyzedPosting,
     skill_names: Mapping[str, str],
@@ -134,7 +161,7 @@ def build_properties(
     몇 개로 못 자르므로, 자를 것을 미리 잘라서 보낸다.
     """
     posting, gap = analyzed.posting, analyzed.gap
-    closing = posting.deadline_note or posting.deadline or ""
+    closing = _closing(posting)
     missing = gap.labeled(skill_names, "missing")
     properties: dict[str, Any] = {
         "공고명": {"title": [{"text": {"content": posting.title[:2000]}}]},

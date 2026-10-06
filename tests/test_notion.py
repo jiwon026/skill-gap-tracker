@@ -476,14 +476,28 @@ class TestDeadlineProperty:
         props = build_properties(make_analyzed(posting=make_posting(**posting_kw)), SKILL_NAMES)
         return "".join(t["text"]["content"] for t in props["마감"]["rich_text"])
 
-    def test_rolling_shows_the_note(self):
-        assert self._closing(deadline_note="상시채용") == "상시채용"
+    def test_rolling_shows_the_note_with_the_posting_date(self):
+        """마감일 없는 공고는 언제 올라온 것인지가 유일한 단서다.
+
+        소스가 '채용시 마감'으로 둔 공고를 두 달째 목록에 남겨 두는 일이
+        있었다(캐치, 2026-10-06 확인: 회사 사이트에서는 내려간 공고).
+        목록에 있으니 마감으로 찍을 근거는 없고, 대신 게시일을 함께 보여
+        사용자가 직접 판단하게 한다.
+        """
+        assert self._closing(deadline_note="상시채용") == "상시채용 (9/1 게시)"
+
+    def test_the_note_alone_when_the_source_gives_no_posting_date(self):
+        assert self._closing(deadline_note="상시채용", posted_at=None) == "상시채용"
 
     def test_date_is_shown_when_there_is_no_note(self):
+        """마감일이 있으면 그것으로 판단한다. 게시일은 덧붙이지 않는다."""
         assert self._closing(deadline="2026-09-30") == "2026-09-30"
 
     def test_note_wins_over_a_date(self):
-        assert self._closing(deadline="9999-12-31", deadline_note="상시채용") == "상시채용"
+        assert self._closing(deadline="9999-12-31", deadline_note="상시채용") == "상시채용 (9/1 게시)"
+
+    def test_a_broken_posting_date_is_ignored(self):
+        assert self._closing(deadline_note="상시채용", posted_at="어제") == "상시채용"
 
     def test_unknown_deadline_is_sent_empty_not_omitted(self):
         """속성을 빼면 예전 값이 남는다. 마감 정보가 사라진 공고는 비워야 한다."""
