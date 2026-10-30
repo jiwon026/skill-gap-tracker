@@ -28,12 +28,12 @@ SKILL_NAMES = {"sql": "SQL", "airflow": "Apache Airflow", "dbt": "dbt"}
 
 def make_posting(**kw):
     base = dict(
-        source="woowahan",
+        source="board",
         source_id="R2609008",
-        company="우아한형제들",
+        company="테스트커머스",
         title="데이터 분석가",
         location="대한민국",
-        url="https://career.woowahan.com/recruitment/R2609008/detail",
+        url="https://example.com/jobs/R2609008",
         body_html="<p>본문</p>",
         posted_at="2026-09-01T10:00:00+09:00",
         fetched_at="2026-09-09T00:00:00+09:00",
@@ -43,12 +43,12 @@ def make_posting(**kw):
 
 def make_analyzed(**kw):
     book = CompanyBook.from_config(
-        {"companies": [{"name": "우아한형제들", "tier": "대기업",
-                        "segment": "배달·퀵커머스", "aliases": ["우아한형제들"]}]}
+        {"companies": [{"name": "테스트커머스", "tier": "대기업",
+                        "segment": "배달·퀵커머스", "aliases": ["테스트커머스"]}]}
     )
     base = dict(
         posting=make_posting(),
-        company=book.identify("우아한형제들"),
+        company=book.identify("테스트커머스"),
         gap=Gap(matched=("sql",), missing=("airflow", "dbt")),
     )
     return AnalyzedPosting(**{**base, **kw})
@@ -82,12 +82,12 @@ class FakeNotion:
 class TestProperties:
     def test_key_is_the_posting_key(self):
         props = build_properties(make_analyzed(), SKILL_NAMES)
-        assert props["key"]["rich_text"][0]["text"]["content"] == "woowahan:R2609008"
+        assert props["key"]["rich_text"][0]["text"]["content"] == "board:R2609008"
 
     def test_title_company_and_url_are_mapped(self):
         props = build_properties(make_analyzed(), SKILL_NAMES)
         assert props["공고명"]["title"][0]["text"]["content"] == "데이터 분석가"
-        assert props["회사"]["select"]["name"] == "우아한형제들"
+        assert props["회사"]["select"]["name"] == "테스트커머스"
         assert props["URL"]["url"].startswith("https://")
 
     def test_featured_skills_are_a_subset_of_the_missing_ones(self):
@@ -143,14 +143,14 @@ class TestSync:
         assert len(client.created) == 1
 
     def test_updates_instead_of_duplicating_a_known_posting(self):
-        client = FakeNotion(existing={"woowahan:R2609008": "page-1"})
+        client = FakeNotion(existing={"board:R2609008": "page-1"})
         result = NotionSync(client).push([make_analyzed()], SKILL_NAMES)
         assert result.created == 0 and result.updated == 1
         assert client.updated[0][0] == "page-1"
         assert not client.created
 
     def test_update_never_touches_status(self):
-        client = FakeNotion(existing={"woowahan:R2609008": "page-1"})
+        client = FakeNotion(existing={"board:R2609008": "page-1"})
         NotionSync(client).push([make_analyzed()], SKILL_NAMES)
         assert "상태" not in client.updated[0][1]
 
@@ -217,14 +217,14 @@ class TestHttpClientContract:
 
     def test_query_filters_on_the_same_property_that_is_written(self):
         client, sent = self._client({"results": []})
-        client.find_page_id("woowahan:R1")
+        client.find_page_id("board:R1")
 
         _, body = sent[0]
         queried = body["filter"]["property"]
         assert queried in build_properties(make_analyzed(), SKILL_NAMES), (
             f"조회 속성 {queried!r}이 build_properties 가 쓰는 속성에 없다"
         )
-        assert body["filter"]["rich_text"]["equals"] == "woowahan:R1"
+        assert body["filter"]["rich_text"]["equals"] == "board:R1"
 
     def test_query_property_type_matches_how_the_value_is_written(self):
         client, sent = self._client({"results": []})
@@ -326,25 +326,25 @@ class TestListingStatus:
     """
 
     KW = dict(
-        active={"woowahan:1"},
-        collected={"woowahan:1", "woowahan:2"},
-        complete_sources=frozenset({"woowahan"}),
+        active={"board:1"},
+        collected={"board:1", "board:2"},
+        complete_sources=frozenset({"board"}),
     )
 
     def test_in_todays_results_is_open(self):
-        assert listing_status("woowahan:1", **self.KW) == "모집중"
+        assert listing_status("board:1", **self.KW) == "모집중"
 
     def test_collected_but_filtered_out_is_excluded(self):
         """이번 경력 필터 수정으로 빠진 7건이 이 경우다."""
-        assert listing_status("woowahan:2", **self.KW) == "제외됨"
+        assert listing_status("board:2", **self.KW) == "제외됨"
 
     def test_missing_from_a_complete_source_is_closed(self):
-        assert listing_status("woowahan:9", **self.KW) == "마감"
+        assert listing_status("board:9", **self.KW) == "마감"
 
     def test_missing_from_an_incomplete_source_is_left_alone(self):
         """수집이 실패한 날 공고가 전부 마감으로 찍히면 안 된다."""
         kw = {**self.KW, "complete_sources": frozenset()}
-        assert listing_status("woowahan:9", **kw) is None
+        assert listing_status("board:9", **kw) is None
 
     def test_search_sources_are_never_judged_closed(self):
         """사람인은 키워드 검색이라 목록에 없다고 마감이 아니다."""
@@ -379,29 +379,29 @@ class TestRetire:
         return client
 
     def _retire(self, client, **kw):
-        base = dict(active=set(), collected=set(), complete_sources=frozenset({"woowahan"}))
+        base = dict(active=set(), collected=set(), complete_sources=frozenset({"board"}))
         return NotionSync(client).retire(**{**base, **kw})
 
     def test_filtered_row_is_marked_excluded(self):
-        client = self._client({"woowahan:2": ("p2", "모집중")})
-        result = self._retire(client, collected={"woowahan:2"})
+        client = self._client({"board:2": ("p2", "모집중")})
+        result = self._retire(client, collected={"board:2"})
         assert client.updated == [("p2", {"공고 현황": {"select": {"name": "제외됨"}}})]
         assert result.excluded == 1
 
     def test_vanished_row_is_marked_closed(self):
-        client = self._client({"woowahan:9": ("p9", "모집중")})
+        client = self._client({"board:9": ("p9", "모집중")})
         result = self._retire(client)
         assert client.updated == [("p9", {"공고 현황": {"select": {"name": "마감"}}})]
         assert result.closed == 1
 
     def test_active_rows_are_not_touched(self):
         """push 가 이미 모집중으로 썼다. 다시 쓰면 요청만 늘어난다."""
-        client = self._client({"woowahan:1": ("p1", "모집중")})
-        self._retire(client, active={"woowahan:1"}, collected={"woowahan:1"})
+        client = self._client({"board:1": ("p1", "모집중")})
+        self._retire(client, active={"board:1"}, collected={"board:1"})
         assert client.updated == []
 
     def test_unchanged_status_is_not_rewritten(self):
-        client = self._client({"woowahan:9": ("p9", "마감")})
+        client = self._client({"board:9": ("p9", "마감")})
         result = self._retire(client)
         assert client.updated == []
         assert result.unchanged == 1
@@ -414,7 +414,7 @@ class TestRetire:
 
     def test_retire_never_writes_user_status(self):
         """'상태'는 사용자의 것이다. 공고가 마감돼도 '지원함'은 남아야 한다."""
-        client = self._client({"woowahan:9": ("p9", "모집중")})
+        client = self._client({"board:9": ("p9", "모집중")})
         self._retire(client)
         assert all("상태" not in props for _, props in client.updated)
 
@@ -431,10 +431,10 @@ class TestRetire:
                     raise OSError("Notion 5xx")
                 super().update_page(page_id, properties)
 
-        client = Flaky(existing={"woowahan:8": "bad", "woowahan:9": "p9"})
-        client.listing = {"woowahan:8": "모집중", "woowahan:9": "모집중"}
+        client = Flaky(existing={"board:8": "bad", "board:9": "p9"})
+        client.listing = {"board:8": "모집중", "board:9": "모집중"}
         result = NotionSync(client).retire(
-            active=set(), collected=set(), complete_sources=frozenset({"woowahan"})
+            active=set(), collected=set(), complete_sources=frozenset({"board"})
         )
         assert result.closed == 1 and result.failed == 1
 
@@ -446,8 +446,8 @@ class TestIterRowsContract:
         from report.notion import HttpNotionClient
 
         pages = [
-            {"results": [_row("p1", "woowahan:1", "모집중")], "has_more": True, "next_cursor": "c2"},
-            {"results": [_row("p2", "woowahan:2", None)], "has_more": False},
+            {"results": [_row("p1", "board:1", "모집중")], "has_more": True, "next_cursor": "c2"},
+            {"results": [_row("p2", "board:2", None)], "has_more": False},
         ]
         sent = []
 
@@ -457,7 +457,7 @@ class TestIterRowsContract:
             return type("R", (), {"read": lambda self: _json.dumps(body).encode()})()
 
         rows = list(HttpNotionClient("t", "db", opener=opener).iter_rows())
-        assert rows == [("p1", "woowahan:1", "모집중"), ("p2", "woowahan:2", None)]
+        assert rows == [("p1", "board:1", "모집중"), ("p2", "board:2", None)]
         assert sent[1]["start_cursor"] == "c2"
 
 

@@ -23,7 +23,7 @@ FETCHED = "2026-09-09T00:00:00+09:00"
 BOILER = "<p>우리 회사는 고객 감동을 실현하기 위해 존재하는 회사입니다</p>"
 
 
-def posting(source_id, title, body, company="테스트커머스", source="woowahan", company_id=None):
+def posting(source_id, title, body, company="테스트커머스", source="board", company_id=None):
     return Posting(
         source=source,
         source_id=source_id,
@@ -198,7 +198,7 @@ class TestDedupe:
         rows = run._dedupe(
             [
                 posting("1", "데이터 분석가", "<p>SQL</p>", source="saramin"),
-                posting("1", "데이터 분석가", "<p>SQL</p>", source="woowahan"),
+                posting("1", "데이터 분석가", "<p>SQL</p>", source="board"),
             ]
         )
         assert len(rows) == 2
@@ -265,7 +265,7 @@ class TestCompleteSources:
 
     #: 보드를 여러 개 가진 완전 소스를 흉내 낸다. 실제 소스 목록이 바뀌어도
     #: 이 클래스가 검사하는 판정 규칙은 그대로여야 한다.
-    EXHAUSTIVE = frozenset({"boards", "woowahan"})
+    EXHAUSTIVE = frozenset({"boards", "board"})
 
     def test_all_boards_fetched_and_non_empty_is_complete(self):
         outcomes = [("boards", True, 370), ("boards", True, 44)]
@@ -285,14 +285,14 @@ class TestCompleteSources:
         assert run._complete_sources([("saramin", True, 500)], self.EXHAUSTIVE) == frozenset()
 
     def test_sources_are_judged_independently(self):
-        outcomes = [("boards", False, 0), ("woowahan", True, 54)]
-        assert run._complete_sources(outcomes, self.EXHAUSTIVE) == frozenset({"woowahan"})
+        outcomes = [("boards", False, 0), ("board", True, 54)]
+        assert run._complete_sources(outcomes, self.EXHAUSTIVE) == frozenset({"board"})
 
-    def test_the_default_set_is_woowahan_only(self):
-        """기본값은 저장소에 남은 완전 소스다. 개인용 수집기는 EXHAUSTIVE 로
-        스스로 밝히므로 여기 없다."""
-        assert run.EXHAUSTIVE_SOURCES == frozenset({"woowahan"})
-        assert run._complete_sources([("woowahan", True, 54)]) == frozenset({"woowahan"})
+    def test_the_default_set_is_empty(self):
+        """저장소에 남은 공개 소스 중 완전 소스는 없다. 개인용 수집기는
+        EXHAUSTIVE 로 스스로 밝히므로 기본값에 없다."""
+        assert run.EXHAUSTIVE_SOURCES == frozenset()
+        assert run._complete_sources([("board", True, 54)]) == frozenset()
 
 
 class TestRegion:
@@ -1020,7 +1020,7 @@ class TestTargetCompanyWithoutTier:
         filled = run.attach_company_sizes(
             rows,
             today=date(2026, 10, 5),
-            fetchers={"woowahan": lambda cid: CompanyProfile(size_class=None, headcount_max=120, founded_year=2015)},
+            fetchers={"board": lambda cid: CompanyProfile(size_class=None, headcount_max=120, founded_year=2015)},
             cache_dir=None,
         )
         assert filled[0].scale == "중소"

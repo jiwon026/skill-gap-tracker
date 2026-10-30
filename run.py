@@ -29,7 +29,7 @@ from analyze.gap import AnalyzedPosting, compute_gap
 from analyze.priority import assign_priority, priority_rank
 from analyze.recommend import Recommendation, recommend, search_terms, target_skills
 from analyze.skill_board import SkillRow, build_skill_rows
-from collect import saramin, woowahan
+from collect import saramin
 from collect.raw_cache import compress_old
 from collect.training import REQUEST_INTERVAL_SEC, fetch_own_fee, prune_cache, search_courses, with_own_fee
 from report.course_notion import CourseSync
@@ -123,11 +123,9 @@ def _raw_cache(name: str, run_date: str) -> Path:
 
 #: 전체 목록을 주는 소스. 여기서 공고가 사라졌다면 마감으로 볼 수 있다.
 #: 사람인은 키워드 검색이고 페이지 상한이 있어서, 목록에 없다고 마감이 아니다.
-#: 우아한형제들은 MAX_PAGES(20) 안에서 끝까지 훑는다 — 현재 54건이라 여유가
-#: 크지만, 공고가 그 상한을 넘으면 뒷장 공고가 마감으로 찍히므로 다시 볼 것.
-#: 개인용 수집기는 EXHAUSTIVE 로 스스로 밝히고, 목록을 끝까지 못 본 날은
-#: complete=False 를 줘서 그날 실패로 기록된다.
-EXHAUSTIVE_SOURCES = frozenset({"woowahan"})
+#: 지금 저장소의 공개 소스 중에는 없다. 개인용 수집기는 EXHAUSTIVE 로 스스로
+#: 밝히고, 목록을 끝까지 못 본 날은 complete=False 를 줘서 그날 실패로 기록된다.
+EXHAUSTIVE_SOURCES: frozenset[str] = frozenset()
 
 
 def _exhaustive(local_modules: Iterable[ModuleType]) -> frozenset[str]:
@@ -161,19 +159,6 @@ def collect(run_date: str, fetched_at: str) -> tuple[tuple[Posting, ...], frozen
     sources = _config("sources.yaml")
     collected: list[Posting] = []
     outcomes: list[tuple[str, bool, int]] = []
-
-    for entry in _enabled(sources.get("woowahan", ())):
-        spec = woowahan.BoardSpec(**entry)
-        try:
-            payload = woowahan.fetch_payload(spec, _raw_cache("woowahan", run_date))
-        except OSError as exc:
-            print(f"  ! 우아한형제들: 수집 실패, 건너뜁니다 — {exc}", file=sys.stderr)
-            outcomes.append(("woowahan", False, 0))
-            continue
-        result = woowahan.parse_board(payload, spec, fetched_at=fetched_at)
-        outcomes.append(("woowahan", True, len(result.postings) + len(result.skipped)))
-        collected.extend(result.postings)
-        _report_source(spec.company, result)
 
     local_modules = _local_sources()
     for module in local_modules:
