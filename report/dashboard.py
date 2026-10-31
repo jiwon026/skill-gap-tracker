@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Iterator, Mapping, Protocol, Sequence
 
 from analyze.gap import AnalyzedPosting
-from analyze.priority import PRIORITIES, assign_priority
+from analyze.priority import GRADES, assign_priority
 from analyze.skill_board import SkillRow
 from report.notion import _choice, _options, _text, notion_request
 
@@ -88,7 +88,7 @@ class Summary:
 def summarize(rows: Sequence[AnalyzedPosting], *, created: int) -> Summary:
     return Summary(
         open_postings=len(rows),
-        high_priority=sum(1 for row in rows if assign_priority(row) == PRIORITIES[0]),
+        high_priority=sum(1 for row in rows if assign_priority(row) == GRADES[0]),
         new_postings=created,
     )
 

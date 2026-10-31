@@ -173,6 +173,44 @@ class TestTargetCompanyTracks:
         assert run.analyze([senior]) == ()
 
 
+class TestRoleUnstatedDrives:
+    """직무를 적지 않은 공채는 버리지 않고 '확인 필요'로 남긴다(2026-11-01).
+
+    직무 표가 이미지에만 있으면 제목과 부서에 직무 단어가 없다. 직무 필터가
+    버리면 사람 눈에는 데이터 직무가 보이는 공고가 통째로 사라진다.
+    """
+
+    def _drive(self, source_id, departments, company="테스트커머스"):
+        import dataclasses
+
+        return dataclasses.replace(
+            posting(source_id, "2026년 하반기 신입사원 공개채용", "<p>[본문 없음] 이미지</p>", company=company),
+            departments=departments,
+        )
+
+    def test_drive_without_a_role_is_kept_for_review(self):
+        rows = run.analyze([self._drive("1", ("2026년 하반기 신입사원 공개채용 #설명회",))])
+        assert [r.posting.source_id for r in rows] == ["1"]
+        assert rows[0].role_unconfirmed
+
+    def test_drive_with_stated_roles_is_judged_as_before(self):
+        assert run.analyze([self._drive("1", ("영업", "재무"))]) == ()
+
+    def test_regular_postings_are_not_marked(self):
+        rows = run.analyze([posting("1", "데이터 분석가", "<p>SQL 경험</p>")])
+        assert rows[0].role_unconfirmed is False
+
+    def test_region_still_applies(self):
+        import dataclasses
+
+        busan = dataclasses.replace(self._drive("1", ()), location="부산")
+        assert run.analyze([busan]) == ()
+
+    def test_kept_drives_are_logged(self, capsys):
+        run.analyze([self._drive("1", ())])
+        assert "직무 미기재 공채 1건" in capsys.readouterr().out
+
+
 class TestOrdering:
 
     def test_more_matched_skills_ranks_higher_than_a_better_ratio(self):
@@ -985,6 +1023,15 @@ class TestTargetScan:
         is_target = seen["is_target"]
         assert is_target("쿠팡풀필먼트서비스", "2026 하반기 신입 공채")
         assert not is_target("테스트커머스", "2026 하반기 신입 공채")
+
+    def test_scanning_sources_get_the_unstated_drive_rule(self, tmp_path):
+        """직무 미기재 공채 판별은 analyze 와 같은 직무 사전(relevance.yaml)을 쓴다."""
+        module, seen = self._module(target_scan=True)
+        run._fetch_local(module, tmp_path / "board.json")
+        rule = seen["is_unstated_drive"]
+        title = "2026년 하반기 신입사원 공개채용"
+        assert rule(title, (title + " #설명회",))
+        assert not rule(title, ("영업", "재무"))
 
     def test_other_sources_keep_the_old_call(self, tmp_path):
         module, seen = self._module(target_scan=False)

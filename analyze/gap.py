@@ -48,6 +48,8 @@ class AnalyzedPosting:
     experiences: tuple[Match, ...] = ()
     #: 화이트리스트 밖 회사의 규모. 소스 회사 정보로 판정한다(run.attach_company_sizes).
     company_size: str | None = None
+    #: 직무를 적지 않은 공채라서 직무 필터 대신 사람이 볼 공고다(extract.relevance.role_unstated).
+    role_unconfirmed: bool = False
 
     @property
     def project_experiences(self) -> tuple[Match, ...]:

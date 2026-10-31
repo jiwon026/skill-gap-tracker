@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from extract.relevance import RelevanceDict, classify
+from extract.relevance import RelevanceDict, classify, role_unstated
 
 CONFIG = Path(__file__).parent.parent / "config" / "relevance.yaml"
 
@@ -275,3 +275,54 @@ class TestTargetCompanyTracks:
         """대상 회사가 아니면 예전과 똑같다. 데이터 엔지니어는 여전히 제외."""
         assert classify("데이터 엔지니어 (신입)", (), dictionary).relevant is False
         assert classify("2026 공채", ("SCM",), dictionary).relevant is False
+
+
+class TestRoleUnstated:
+    """직무를 적지 않은 공채(`role_unstated`).
+
+    회사가 세부 직무 칸에 제목을 그대로 넣고 직무 표는 이미지에만 둔 공채가
+    있다. 제목과 부서에 직무 단어가 없으니 classify 는 버린다. 버리지 말고
+    사람이 이미지를 보게 하려고 이 공고를 따로 알아본다(2026-11-01).
+    실데이터 34일치에서 걸린 모양을 그대로 옮겼다.
+    """
+
+    @pytest.mark.parametrize(
+        "title, departments",
+        [
+            ("2026 대졸 신입사원 채용", ("2026 대졸 신입사원 채용",)),
+            ("2026년 하반기 신입사원 공개채용", ("2026년 하반기 신입사원 공개채용 #설명회",)),
+            ("2026년 하반기 CJ올리브네트웍스 신입사원 모집 #공채", ("신입사원",)),
+            ("2026년 하반기 HS효성그룹 신입 공채", ("2026년 하반기 HS효성그룹 신입 공채 채용설명회",)),
+            ("2026 신입 공채 채용설명회", ("2026 신입 공채 채용설명회",)),
+            ("SIMPAC그룹 신입/경력 공개 채용", ("SIMPAC그룹 신입/경력 공개 채용",)),
+            ("2026년 하반기 4급 신입사원 공개채용", ()),
+        ],
+    )
+    def test_drives_without_a_role(self, title, departments, dictionary):
+        assert role_unstated(title, departments, dictionary)
+
+    @pytest.mark.parametrize(
+        "title, departments",
+        [
+            # 세부 직무가 적혀 있으면 classify 가 판단한다. 사람이 볼 일이 아니다.
+            ("2026년 하반기 신입사원 채용 #공채", ("Panel 설계", "회로", "기구")),
+            ("커머스부문 [뷰티 AMD(계약직)] 신입수시 채용", ("뷰티 AMD",)),
+            ("2026년 9월 롯데마트 영업관리 JA Grade 신입사원 채용 I'M전형 #공채", ("영업관리",)),
+            ("IT 부문 (개발, IT 운영, IT 지원, 정보보안) 수시 채용", ("개발", "IT 운영")),
+            # 공채가 아닌 단일 직무 공고는 제목이 곧 직무다.
+            ("주니어 MD (계약직)", ("주니어 MD (계약직)",)),
+            ("AI Content Creator", ()),
+            # 부서가 제목의 일부이고 공채 표현을 품어도 직무가 붙어 있으면 직무다.
+            ("매장 신입 직원(Curator) 채용(글로벌전형)", ("매장 신입 직원(Curator)",)),
+        ],
+    )
+    def test_postings_that_state_a_role(self, title, departments, dictionary):
+        assert role_unstated(title, departments, dictionary) is False
+
+    def test_excluded_titles_stay_excluded(self, dictionary):
+        """상시 더미 항목은 공채 표현이 있어도 사람에게 넘기지 않는다."""
+        assert role_unstated("신입사원 인재풀", ("신입사원 인재풀",), dictionary) is False
+
+    def test_dictionary_without_drives_never_flags(self):
+        bare = RelevanceDict.from_config({"core": ["데이터 분석"]})
+        assert role_unstated("2026 대졸 신입사원 채용", (), bare) is False

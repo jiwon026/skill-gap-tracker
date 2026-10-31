@@ -25,7 +25,11 @@ from extract.matching import alias_to_pattern
 
 #: 설정 파일에 올 수 있는 키. adjacent(참고용 직군)는 2026-09-11에 없앴다 —
 #: 개발·연구직을 수집에서 빼면서 비어 있었고, 판정은 통과/제외 하나로 줄었다.
-_KEYS = ("core", "exclude", "target")
+_KEYS = ("core", "exclude", "target", "drive")
+
+#: 부서 칸에서 지워 읽는 해시태그('#설명회', '#공채'). 직무가 아니라 채용
+#: 사이트가 붙이는 꼬리표다.
+_TAG = re.compile(r"#\S+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +59,8 @@ class RelevanceDict:
     exclusions: tuple[Term, ...]
     #: 대상 회사 공고에서만 통과 근거가 되는 직무.
     target_terms: tuple[Term, ...] = ()
+    #: 전사 공채를 알아보는 제목 표현. 직무 판정에는 쓰지 않는다(`role_unstated`).
+    drive_terms: tuple[Term, ...] = ()
 
     @classmethod
     def from_config(cls, config: Mapping[str, Any]) -> "RelevanceDict":
@@ -75,6 +81,7 @@ class RelevanceDict:
             terms=compile_all(config.get("core") or ()),
             exclusions=compile_all(config.get("exclude") or ()),
             target_terms=compile_all(config.get("target") or ()),
+            drive_terms=compile_all(config.get("drive") or ()),
         )
 
 
@@ -129,3 +136,35 @@ def classify(
         if term.matcher.search(field)
     )
     return Verdict(matched=tuple(dict.fromkeys(matched)))
+
+
+def _compact(text: str) -> str:
+    return re.sub(r"\s+", "", _TAG.sub("", text or ""))
+
+
+def role_unstated(title: str, departments: Sequence[str], dictionary: RelevanceDict) -> bool:
+    """직무를 적지 않은 공채인가. 순수 함수다.
+
+    공채 제목인데 부서가 비었거나 제목을 되풀이할 뿐이면 그렇다. 회사가 직무
+    표를 이미지로만 올린 공고가 이 모양이다(2026-11-01, 34일치 11건). classify 는
+    이런 공고를 버린다. 버리지 않고 사람이 이미지를 보게 하려고 따로 알아본다.
+
+    부서가 제목의 일부여도 직무일 수 있다('[뷰티 AMD] 신입수시 채용'의 '뷰티 AMD',
+    '매장 신입 직원(Curator)'). 그래서 제목보다 짧은 부서는 공채 표현 그 자체
+    ('신입사원')일 때만 빈 것으로 본다. 제외어에 걸린 제목('인재풀')은 사람에게 넘기지 않는다.
+    """
+    title = title or ""
+    if not any(t.matcher.search(title) for t in dictionary.drive_terms):
+        return False
+    if any(t.matcher.search(title) for t in dictionary.exclusions):
+        return False
+
+    whole = _compact(title)
+
+    def says_nothing(department: str) -> bool:
+        part = _compact(department)
+        if not part or part == whole or whole in part:
+            return True
+        return any(t.matcher.fullmatch(part) for t in dictionary.drive_terms)
+
+    return all(says_nothing(d) for d in departments or ())

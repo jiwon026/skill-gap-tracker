@@ -20,7 +20,7 @@ def _match(kind, n):
     return Match(id=f"{kind}{n}", name=f"{kind}{n}", kind=kind, pitch="", signals=())
 
 
-def analyzed(projects=0, activities=0, *, company=TARGET):
+def analyzed(projects=0, activities=0, *, company=TARGET, role_unconfirmed=False):
     experiences = tuple(_match("project", i) for i in range(projects))
     experiences += tuple(_match("activity", i) for i in range(activities))
     posting = Posting(
@@ -31,6 +31,7 @@ def analyzed(projects=0, activities=0, *, company=TARGET):
     return AnalyzedPosting(
         posting=posting, company=company,
         gap=Gap(matched=("sql",), missing=()), experiences=experiences,
+        role_unconfirmed=role_unconfirmed,
     )
 
 
@@ -63,13 +64,28 @@ class TestStepDown:
 class TestOrdering:
     def test_labels_run_from_high_to_low(self):
         """Notion select 는 옵션 순서대로 정렬된다. 이 순서가 곧 정렬 순서다."""
-        assert PRIORITIES == ("높음", "중간", "낮음")
+        assert PRIORITIES == ("확인 필요", "높음", "중간", "낮음")
 
     def test_rank_puts_high_first(self):
-        assert priority_rank("높음") < priority_rank("중간") < priority_rank("낮음")
+        assert priority_rank("확인 필요") < priority_rank("높음") < priority_rank("중간") < priority_rank("낮음")
 
     def test_every_assigned_label_has_a_rank(self):
         for projects in range(4):
             label = assign_priority(analyzed(projects=projects))
             assert label in PRIORITIES
             priority_rank(label)
+
+
+class TestRoleUnconfirmed:
+    """직무를 적지 않은 공채는 등급을 매길 근거가 없다(2026-11-01).
+
+    직무 표가 이미지에만 있어 스킬도 경험도 0으로 잡힌다. 그대로 두면 '낮음'으로
+    목록 바닥에 묻힌다. 사람이 이미지를 보고 판단하도록 맨 위로 올린다.
+    """
+
+    def test_is_review_before_anything_else(self):
+        assert assign_priority(analyzed(projects=0, role_unconfirmed=True)) == "확인 필요"
+
+    def test_wins_over_strong_pitch_and_company_step_down(self):
+        assert assign_priority(analyzed(projects=3, role_unconfirmed=True)) == "확인 필요"
+        assert assign_priority(analyzed(company=None, role_unconfirmed=True)) == "확인 필요"

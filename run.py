@@ -75,7 +75,7 @@ from extract.company_size import classify_size
 from extract.experience import ExperienceBook, match_experiences
 from extract.normalize import to_segments
 from extract.region import RegionRule, in_region
-from extract.relevance import RelevanceDict, classify
+from extract.relevance import RelevanceDict, classify, role_unstated
 from extract.seniority import SeniorityRule, is_entry_level, years_from_requirements
 from extract.skills import SkillDict, extract_skills
 from report.dashboard import DashboardSync, summarize
@@ -203,15 +203,24 @@ def _fetch_local(module: ModuleType, cache_path: Path) -> Mapping[str, Any]:
     TARGET_SCAN 수집기에는 대상 회사 판별을 넘긴다. 데이터 직무 분류로만 목록을
     받으면 사업 직무만으로 낸 대상 회사 공채가 처음부터 안 들어온다. 판별 기준은
     analyze 와 같은 companies.yaml 이어야 수집과 판정이 다른 회사를 보지 않는다.
+
+    직무를 적지 않은 공채 판별도 함께 넘긴다. analyze 가 '확인 필요'로 남기는
+    규칙과 같아야 받아 온 공고가 판정에서 버려지지 않는다.
     """
     if not getattr(module, "TARGET_SCAN", False):
         return module.fetch_payload(module.DEFAULT_SPEC, cache_path)
     book = CompanyBook.from_config(_config("companies.yaml"))
+    relevance = RelevanceDict.from_config(_config("relevance.yaml"))
 
     def is_target(company: str, title: str) -> bool:
         return book.identify(company, title=title) is not None
 
-    return module.fetch_payload(module.DEFAULT_SPEC, cache_path, is_target=is_target)
+    def is_unstated_drive(title: str, departments: Sequence[str]) -> bool:
+        return role_unstated(title, departments, relevance)
+
+    return module.fetch_payload(
+        module.DEFAULT_SPEC, cache_path, is_target=is_target, is_unstated_drive=is_unstated_drive
+    )
 
 
 def _dedupe(postings: Iterable[Posting]) -> tuple[Posting, ...]:
@@ -288,6 +297,9 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
     skipped_role = 0
     skipped_senior = 0
     skipped_region = 0
+    # 직무를 적지 않은 공채. 직무 표가 이미지에만 있어 필터가 판단할 재료가
+    # 없다. 버리지 않고 '확인 필요'로 남겨 사람이 이미지를 보게 한다.
+    unconfirmed: set[str] = set()
     for posting in postings:
         company = book.identify(posting.company, title=posting.title)
         companies[posting.key] = company
@@ -295,8 +307,10 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
             posting.title, posting.departments, relevance, target=company is not None
         )
         if not verdict.relevant:
-            skipped_role += 1
-            continue
+            if not role_unstated(posting.title, posting.departments, relevance):
+                skipped_role += 1
+                continue
+            unconfirmed.add(posting.key)
         if not in_region(posting.title, posting.location, region):
             skipped_region += 1
             continue
@@ -323,6 +337,9 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
         print(f"  - 수도권이 아니어서 제외 {skipped_region}건")
     if skipped_senior:
         print(f"  - 경력 요건이 맞지 않아 제외 {skipped_senior}건")
+    kept_unconfirmed = sum(1 for rows in by_company.values() for p in rows if p.key in unconfirmed)
+    if kept_unconfirmed:
+        print(f"  - 직무 미기재 공채 {kept_unconfirmed}건은 '확인 필요'로 남김")
 
     analyzed: list[AnalyzedPosting] = []
     for company_raw, rows in by_company.items():
@@ -338,6 +355,7 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
                     company=companies[posting.key],
                     gap=compute_gap(required, owned),
                     experiences=match_experiences(posting.title, text, experience_book),
+                    role_unconfirmed=posting.key in unconfirmed,
                 )
             )
 

@@ -13,14 +13,20 @@ Notion에서 무엇부터 지원할지 가르는 등급이다. 규칙은 한 문
 걸려서, 세면 전부 높음이 된다.
 
 타겟 회사 여부는 등급을 올리지 않고 내리기만 한다.
+
+직무를 적지 않은 공채는 이 규칙 밖이다. 직무 표가 이미지에만 있어 경험도
+스킬도 0으로 잡히므로, 등급 대신 '확인 필요'로 맨 위에 둔다(2026-11-01).
 """
 from __future__ import annotations
 
 from analyze.gap import AnalyzedPosting
 
-#: 높은 것부터. Notion select 는 옵션 순서대로 정렬되므로 이 순서가 곧
-#: Notion 에서의 정렬 순서다.
-PRIORITIES = ("높음", "중간", "낮음")
+#: 사람이 이미지를 보고 판단해야 하는 공고. 등급보다 먼저 본다.
+REVIEW = "확인 필요"
+#: 규칙으로 매기는 등급. 높은 것부터.
+GRADES = ("높음", "중간", "낮음")
+#: Notion select 는 옵션 순서대로 정렬되므로 이 순서가 곧 Notion 에서의 정렬 순서다.
+PRIORITIES = (REVIEW, *GRADES)
 
 #: 이 수 이상의 프로젝트로 어필할 수 있으면 '높음'에서 출발한다.
 _STRONG_PITCH = 2
@@ -36,12 +42,14 @@ def _base_level(project_count: int) -> int:
 
 def assign_priority(analyzed: AnalyzedPosting) -> str:
     """공고 한 건의 우선순위 등급. 순수 함수다."""
+    if analyzed.role_unconfirmed:
+        return REVIEW
     level = _base_level(len(analyzed.project_experiences))
     if analyzed.company is None:
         level += 1
-    return PRIORITIES[min(level, len(PRIORITIES) - 1)]
+    return GRADES[min(level, len(GRADES) - 1)]
 
 
 def priority_rank(label: str) -> int:
-    """정렬 키. 높음이 0이다."""
+    """정렬 키. 확인 필요가 0, 높음이 1이다."""
     return PRIORITIES.index(label)

@@ -43,7 +43,7 @@ _PARTIAL_BUILD_HINT = "페이지에 일부만 만들어졌을 수 있습니다. 
 #: 여기 없는 select(회사)는 빈 채로 만들고, 값이 들어올 때 Notion 이 선택지를 만든다.
 #: '상태'는 사용자가 쓰는 열이다. 파이프라인은 새 행에 INITIAL_STATUS 만 넣는다.
 SELECT_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
-    "우선순위": tuple(zip(PRIORITIES, ("red", "yellow", "gray"))),
+    "우선순위": tuple(zip(PRIORITIES, ("purple", "red", "yellow", "gray"))),
     "규모": tuple(zip((*SIZES, UNKNOWN), ("red", "orange", "green", "blue", "gray"))),
     "공고 현황": tuple(zip(LISTING_STATUSES, ("green", "orange", "gray"))),
     "상태": ((INITIAL_STATUS, "green"), ("검토", "yellow"), ("지원", "blue")),
