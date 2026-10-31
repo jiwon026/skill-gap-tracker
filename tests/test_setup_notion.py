@@ -59,6 +59,12 @@ class TestPayload:
     def test_status_starts_with_the_value_new_rows_get(self, payload):
         assert option_names(payload, "상태")[0] == INITIAL_STATUS
 
+    def test_status_has_a_way_to_dismiss_a_posting(self, payload):
+        """'확인 필요' 공고를 보고 해당 직무가 없으면 고를 값이 있어야 한다(2026-11-01)."""
+        from report.notion import NOT_APPLICABLE
+
+        assert NOT_APPLICABLE in option_names(payload, "상태")
+
     def test_free_select_columns_start_empty(self, payload):
         """회사명은 공고마다 다르다. 값이 들어올 때 Notion 이 선택지를 만든다."""
         assert payload["properties"]["회사"]["select"]["options"] == []

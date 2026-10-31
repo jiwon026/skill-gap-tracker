@@ -64,7 +64,11 @@ def test_jobs_view_shows_open_postings_under_the_heading():
         "parent": {"type": "page_id", "page_id": "page"},
         "position": {"type": "after_block", "block_id": "h"},
     }
-    assert body["filter"] == {"property": "공고 현황", "select": {"equals": "모집중"}}
+    # '해당 없음'으로 고른 공고는 다시 올라오지 않는다(2026-11-01).
+    assert body["filter"] == {"and": [
+        {"property": "공고 현황", "select": {"equals": "모집중"}},
+        {"property": "상태", "select": {"does_not_equal": "해당 없음"}},
+    ]}
     # 우선순위가 같으면 새로 들어온 공고가 위로 온다. Views API 는 sort 마다
     # property 를 요구해서(2026-09-17 실측, timestamp 는 400) created_time 열로 건다.
     assert body["sorts"] == [

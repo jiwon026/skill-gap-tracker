@@ -289,6 +289,17 @@ class TestPriorityProperty:
         뺐고, 직군 판정은 통과/제외 하나로 줄었다(2026-09-11)."""
         assert "직군" not in build_properties(make_analyzed(), SKILL_NAMES)
 
+    def test_review_rows_say_what_to_check(self):
+        """'확인 필요' 행은 어필 대신 무엇을 볼지 적는다. 경험 매칭은 이미지 밖
+        글자로 한 것이라 근거가 없다(2026-11-01)."""
+        props = build_properties(make_analyzed(role_unconfirmed=True), SKILL_NAMES)
+        hint = props["어필 포인트"]["rich_text"][0]["text"]["content"]
+        assert "모집 직무" in hint and "해당 없음" in hint
+
+    def test_regular_rows_keep_the_pitch(self):
+        props = build_properties(make_analyzed(), SKILL_NAMES)
+        assert "모집 직무" not in str(props["어필 포인트"])
+
     def test_priority_is_refreshed_on_update(self):
         """상태와 달리 우선순위는 매 실행 다시 계산된다. 사용자의 것이 아니다."""
         props = build_properties(make_analyzed(), SKILL_NAMES, for_update=True)

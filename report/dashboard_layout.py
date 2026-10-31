@@ -26,7 +26,7 @@ from report.course_notion import (
     OPEN_RECOMMENDATION,
 )
 from report.dashboard import MISSING, OWNED, SKILL_DB_PROPERTIES, SUMMARY_HEADING
-from report.notion import OPEN
+from report.notion import NOT_APPLICABLE, OPEN
 
 VIEWS_API_VERSION = "2026-03-11"
 
@@ -110,7 +110,11 @@ def jobs_view_payload(data_source_id: str, property_ids: Mapping[str, str], *, p
         "name": JOBS_HEADING,
         "type": "table",
         "create_database": _linked(page_id, after_block),
-        "filter": {"property": "공고 현황", "select": {"equals": OPEN}},
+        # 사용자가 '해당 없음'으로 고른 공고는 마감될 때까지 다시 올라오지 않게 숨긴다.
+        "filter": {"and": [
+            {"property": "공고 현황", "select": {"equals": OPEN}},
+            {"property": "상태", "select": {"does_not_equal": NOT_APPLICABLE}},
+        ]},
         # select 정렬은 선택지 순서를 따른다. 우선순위 선택지는 높음, 중간, 낮음 순이다.
         # 같은 우선순위 안에서는 새로 들어온 공고가 위로 오게 생성 시각을 뒤에 건다.
         # Views API 는 sort 마다 property 를 요구한다. 문서에 있는

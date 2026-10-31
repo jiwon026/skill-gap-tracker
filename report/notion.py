@@ -35,6 +35,15 @@ TIMEOUT_SEC = 30
 
 #: 신규 행의 초깃값. 이후로는 사용자의 것이다.
 INITIAL_STATUS = "신규"
+#: 사용자가 보고 지원하지 않기로 한 공고. 공고 목록 보기가 숨긴다(2026-11-01).
+NOT_APPLICABLE = "해당 없음"
+
+#: '확인 필요' 행의 어필 포인트 자리에 쓰는 안내. 직무 표가 이미지에만 있는
+#: 공고라 경험 매칭이 근거가 없고, 사람이 무엇을 볼지가 더 쓸모 있다.
+REVIEW_HINT = (
+    "이미지의 모집 직무 표 확인: 데이터, 분석 직무가 있으면 상태를 검토로,"
+    " 없으면 해당 없음으로"
+)
 
 #: '공고 현황'. 사용자의 지원 '상태'와 달리 시스템이 매 실행 다시 쓴다.
 #: Notion select 는 옵션 순서대로 정렬되므로 이 순서가 곧 정렬 순서다.
@@ -176,7 +185,7 @@ def build_properties(
         "부족 스킬": _options(missing),
         "핵심 부족 스킬": _options(n for n in missing if n in featured_skills),
         "어필 경험": _options(m.name for m in analyzed.experiences),
-        "어필 포인트": _text(analyzed.pitch),
+        "어필 포인트": _text(REVIEW_HINT if analyzed.role_unconfirmed else analyzed.pitch),
         "URL": {"url": posting.url},
         "key": _text(posting.key),
         # 결과에 올라온 행은 모집중이다. 규칙이 느슨해져 다시 들어온 행도
