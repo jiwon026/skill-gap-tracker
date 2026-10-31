@@ -293,7 +293,6 @@ class TestRoleUnstated:
             ("2026년 하반기 신입사원 공개채용", ("2026년 하반기 신입사원 공개채용 #설명회",)),
             ("2026년 하반기 CJ올리브네트웍스 신입사원 모집 #공채", ("신입사원",)),
             ("2026년 하반기 HS효성그룹 신입 공채", ("2026년 하반기 HS효성그룹 신입 공채 채용설명회",)),
-            ("2026 신입 공채 채용설명회", ("2026 신입 공채 채용설명회",)),
             ("SIMPAC그룹 신입/경력 공개 채용", ("SIMPAC그룹 신입/경력 공개 채용",)),
             ("2026년 하반기 4급 신입사원 공개채용", ()),
         ],
@@ -318,6 +317,15 @@ class TestRoleUnstated:
     )
     def test_postings_that_state_a_role(self, title, departments, dictionary):
         assert role_unstated(title, departments, dictionary) is False
+
+    def test_info_sessions_are_not_postings(self, dictionary):
+        """채용설명회는 행사 안내지 공고가 아니다(2026-11-01, 안랩 건)."""
+        assert role_unstated("2026 신입 공채 채용설명회", ("2026 신입 공채 채용설명회",), dictionary) is False
+        assert classify("2027년도 신입직원 채용설명회", ("데이터 분석",), dictionary).relevant is False
+
+    def test_an_info_session_tag_on_a_department_keeps_the_role(self, dictionary):
+        """'#설명회'는 공고에 붙는 꼬리표다. 공고와 그 직무는 그대로 본다."""
+        assert classify("2026 공채", ("데이터 분석 #설명회",), dictionary).relevant
 
     def test_excluded_titles_stay_excluded(self, dictionary):
         """상시 더미 항목은 공채 표현이 있어도 사람에게 넘기지 않는다."""
