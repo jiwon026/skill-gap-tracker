@@ -5,7 +5,8 @@
 """
 import pytest
 
-from analyze.recommend import DIRECT, FOUNDATION, Recommendation
+from analyze.recommend import DIRECT, FOUNDATION, Recommendation, search_link
+from analyze.skill_board import SkillRow
 from collect.training import Course
 from report.course_notion import (
     COURSE_DB_PROPERTIES,
@@ -28,6 +29,24 @@ def course(**kw):
 
 def rec(kind=DIRECT, **kw):
     return Recommendation(skill_id="powerbi", skill_name="Power BI", kind=kind, course=course(**kw))
+
+
+class TestSearchLinkRow:
+    """인프런 검색 링크 줄. 날짜와 금액이 없는 과정이다."""
+
+    def _props(self):
+        row = SkillRow(skill_id="airflow", name="Apache Airflow", category="pipeline", owned=False,
+                       evidence=(), demand=3, companies=())
+        return course_properties(search_link(row), skill_page_id="s")
+
+    def test_period_reads_always_open(self):
+        assert self._props()["기간"]["rich_text"][0]["text"]["content"] == "상시"
+
+    def test_carries_the_search_url_and_no_fees(self):
+        props = self._props()
+        assert props["링크"] == {"url": "https://www.inflearn.com/search?s=Apache%20Airflow"}
+        assert props["본인부담액"] == {"number": None} and props["훈련비"] == {"number": None}
+        assert props["기관"]["rich_text"][0]["text"]["content"] == "인프런"
 
 
 class FakeCourses:

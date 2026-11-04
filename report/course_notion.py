@@ -68,7 +68,8 @@ def course_properties(
         "연결": _choice(rec.kind),
         "기관": _text(course.institution),
         "지역": _text("온라인" if course.is_remote else course.address),
-        "기간": _text(f"{course.start} ~ {course.end}"),
+        # 검색 링크 줄(analyze.recommend.search_link)은 날짜가 없다.
+        "기간": _text(f"{course.start} ~ {course.end}" if course.start else "상시"),
         "수업 방식": _choice(course.weekend_label),
         # 없으면 null 을 보낸다. 속성을 빼면 어제 값이 남는다.
         "본인부담액": {"number": course.own_fee},

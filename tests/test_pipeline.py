@@ -13,6 +13,7 @@ from datetime import date
 import pytest
 
 import run
+from analyze.recommend import INFLEARN
 from collect.schema import CompanyProfile, Posting
 from report.course_notion import CourseSyncResult
 from report.dashboard import SkillSyncResult
@@ -874,12 +875,43 @@ class TestPublishCourses:
                               evidence=(), demand=3, companies=("쿠팡",))]
         run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
 
-        assert [r.course.course_id for r in recorder.recs] == ["G1"]
+        assert [r.course.course_id for r in recorder.recs if r.kind != INFLEARN] == ["G1"]
         # 첫 화면에 세울 것은 적재 때 함께 넘어간다. Notion 표가 상위 N 줄을
         # 못 자르므로 파이프라인이 골라 표시해 둔다.
         assert recorder.featured == frozenset({r.key for r in recorder.recs})
         err = capsys.readouterr().err
         assert "강의 검색 실패 (실패어)" in err and "검색 서버 오류" in err
+
+    def test_every_target_skill_gets_a_search_link_on_the_front_page(self, monkeypatch):
+        """인프런 검색 링크는 추천 스킬마다 한 줄, 첫 화면에 둔다. 지난 추천으로 내려가지 않게
+        오늘 추천 목록에도 넣는다(2026-11-05)."""
+        monkeypatch.setenv("WORK24_TRAINING_KEY", "k")
+
+        class Recorder:
+            def push(self, recs, pages, *, featured=()):
+                self.recs, self.featured = list(recs), featured
+                return CourseSyncResult(created=0, updated=0, failed=0)
+
+            def retire(self, keys):
+                self.active = set(keys)
+                return 0
+
+        recorder = Recorder()
+        monkeypatch.setattr(run.CourseSync, "from_env", classmethod(lambda cls: recorder))
+        monkeypatch.setattr(run, "_config", _fake_config(
+            skills={"skills": [{"id": "powerbi", "training": {"direct": ["Power BI"]}}]},
+            training=DEFAULT_TRAINING_CFG,
+        ))
+        monkeypatch.setattr(run, "search_courses", lambda *a, **k: (_training_course("G1"),))
+        monkeypatch.setattr(run, "fetch_own_fee", lambda *a, **k: None)
+
+        rows = [run.SkillRow(skill_id="powerbi", name="Power BI", category="bi", owned=False,
+                             evidence=(), demand=3, companies=("쿠팡",))]
+        run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
+
+        links = [r for r in recorder.recs if r.kind == INFLEARN]
+        assert [r.skill_id for r in links] == ["powerbi"]
+        assert links[0].key in recorder.featured and links[0].key in recorder.active
 
     def test_a_failing_own_fee_lookup_still_pushes_the_course_with_none(self, monkeypatch, capsys):
         """본인부담액 조회 하나가 죽어도 그 과정은 own_fee 없이 그대로 올라간다."""
@@ -913,8 +945,9 @@ class TestPublishCourses:
                               evidence=(), demand=3, companies=("쿠팡",))]
         run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
 
-        assert len(recorder.recs) == 1
-        assert recorder.recs[0].course.own_fee is None
+        funded = [r for r in recorder.recs if r.kind != INFLEARN]
+        assert len(funded) == 1
+        assert funded[0].course.own_fee is None
         err = capsys.readouterr().err
         assert "본인부담액 조회 실패" in err and "본인부담액 파싱 실패" in err
 
@@ -978,7 +1011,7 @@ class TestPublishCourses:
                               evidence=(), demand=3, companies=("쿠팡",))]
         run.publish_courses(rows, {"powerbi": "p1"}, run_date="2026-09-16")
 
-        assert len(recorder.recs) == 2
+        assert len([r for r in recorder.recs if r.kind != INFLEARN]) == 2
         # 검색어 2개 사이 1번, 본인부담액 조회 2건 사이 1번.
         assert self.sleep_calls.count(run.REQUEST_INTERVAL_SEC) >= 2
 

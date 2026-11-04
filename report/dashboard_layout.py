@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
-from analyze.recommend import DIRECT, FOUNDATION
+from analyze.recommend import DIRECT, FOUNDATION, INFLEARN
 from analyze.featured import FEATURED_LIMIT
 from report.course_notion import (
     COURSE_DB_PROPERTIES,
@@ -49,7 +49,8 @@ COURSE_COLUMNS = ("과정명", "스킬", "연결", "수업 방식", "기간", "�
 #: 첫 화면에 두는 요약 표. 어떤 역량을 무슨 과정으로, 언제, 어떤 성격으로
 #: 채우는지만 본다. 비용과 신청 상태는 하위 페이지에서 본다.
 COURSE_SUMMARY_HEADING = "들어볼 만한 강의"
-COURSE_SUMMARY_COLUMNS = ("스킬", "과정명", "기간", "수업 방식")
+#: 인프런 검색 줄은 링크를 눌러야 쓸모가 있어 링크 열을 둔다(2026-11-05).
+COURSE_SUMMARY_COLUMNS = ("스킬", "과정명", "기간", "수업 방식", "링크")
 
 #: 차트가 세는 열. '부족 스킬' 전체가 아니라 오늘 상위 몇 개만 담긴다.
 #: Notion 차트는 막대를 상위 N 개로 자르지 못한다(2026-09-17 확인).
@@ -246,7 +247,8 @@ def course_database_payload(parent_page_id: str, skill_data_source_id: str) -> d
                                                        for n, c in zip(COURSE_STATUSES, colors)]}}
         elif name == "연결":
             properties[name] = {"select": {"options": [{"name": DIRECT, "color": "green"},
-                                                       {"name": FOUNDATION, "color": "gray"}]}}
+                                                       {"name": FOUNDATION, "color": "gray"},
+                                                       {"name": INFLEARN, "color": "blue"}]}}
         elif kind == "select":
             properties[name] = {"select": {"options": []}}
         elif kind == "number":

@@ -27,7 +27,7 @@ import yaml
 from analyze.featured import featured_courses, top_missing_skills
 from analyze.gap import AnalyzedPosting, compute_gap
 from analyze.priority import assign_priority, priority_rank
-from analyze.recommend import Recommendation, recommend, search_terms, target_skills
+from analyze.recommend import Recommendation, recommend, search_link, search_terms, target_skills
 from analyze.skill_board import SkillRow, build_skill_rows
 from collect import saramin
 from collect.raw_cache import compress_old
@@ -668,9 +668,12 @@ def publish_courses(
 
         # 스킬을 돌아가며 골라야 한 스킬의 과정이 첫 화면을 다 먹지 않는다.
         front = featured_courses(priced)
-        result = courses_sync.push(priced, skill_pages, featured=front)
+        # 인프런 검색 링크는 추천 스킬마다 한 줄, 늘 첫 화면에 둔다(analyze.recommend.search_link).
+        links = tuple(search_link(target) for target in targets)
+        front = front | {link.key for link in links}
+        result = courses_sync.push((*priced, *links), skill_pages, featured=front)
         if priced:
-            retired = courses_sync.retire(rec.key for rec in priced)
+            retired = courses_sync.retire(rec.key for rec in (*priced, *links))
         else:
             # 추천이 0건인 날은 침묵으로 본다. 공고 DB 의 retire 는
             # complete_sources 로 소스가 죽은 날과 공고가 진짜 마감된 날을

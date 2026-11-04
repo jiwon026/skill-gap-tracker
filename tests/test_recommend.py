@@ -5,7 +5,17 @@
   - 같은 과정의 여러 회차를 여러 건으로 세지 않는다.
   - 도구를 직접 다루는 과정과 기반 역량 과정을 구분해서 보여 준다.
 """
-from analyze.recommend import DIRECT, FOUNDATION, pick, recommend, search_terms, target_skills, usable
+from analyze.recommend import (
+    DIRECT,
+    FOUNDATION,
+    INFLEARN,
+    pick,
+    recommend,
+    search_link,
+    search_terms,
+    target_skills,
+    usable,
+)
 from analyze.skill_board import SkillRow
 from collect.training import Course
 
@@ -154,3 +164,27 @@ class TestRecommend:
         assert len(got) == 5
         assert all(r.kind == DIRECT for r in got)
         assert all(r.course.course_id.startswith("D") for r in got)
+
+
+class TestSearchLink:
+    """국비 과정 옆에 인프런 검색 링크를 한 줄씩 둔다(2026-11-05 사용자 결정).
+
+    인프런은 공식 API 가 없고 robots.txt 가 /api 를 막는다. 강의를 받아 오지 않고
+    검색 결과 페이지로 가는 링크만 만든다. 고르는 건 사람이 한다.
+    """
+
+    def test_points_to_the_search_page_for_the_skill(self):
+        link = search_link(skill("airflow", name="Apache Airflow"))
+        assert link.kind == INFLEARN
+        assert link.course.url == "https://www.inflearn.com/search?s=Apache%20Airflow"
+        assert link.course.title == "인프런에서 'Apache Airflow' 찾기"
+
+    def test_has_a_stable_key_apart_from_funded_courses(self):
+        a, b = search_link(skill("powerbi")), search_link(skill("powerbi"))
+        assert a.key == b.key
+        assert a.key != recommend([skill("powerbi")], {"powerbi": {"training": {"direct": ["Power BI"]}}},
+                                  {"Power BI": (course(),)}, per_skill=5, today="2026-10-01",
+                                  **FILTERS)[0].key
+
+    def test_reads_as_an_online_course(self):
+        assert search_link(skill()).course.is_remote

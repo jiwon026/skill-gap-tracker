@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -20,6 +21,9 @@ from collect.training import Course
 
 DIRECT = "직접"
 FOUNDATION = "기반"
+#: 국비 과정이 아니라 인프런 검색 결과로 가는 링크 줄(`search_link`).
+INFLEARN = "인프런"
+INFLEARN_SEARCH_URL = "https://www.inflearn.com/search?s={query}"
 
 #: 직접 과정을 기반 과정보다 앞에 둔다.
 _KIND_RANK = {DIRECT: 0, FOUNDATION: 1}
@@ -149,3 +153,20 @@ def recommend(
                 )
             )
     return tuple(out)
+
+
+def search_link(skill: SkillRow) -> Recommendation:
+    """부족 스킬 하나의 인프런 검색 링크 줄. 순수 함수다.
+
+    인프런은 공식 API 가 없고 robots.txt 가 /api 를 막는다. 강의를 받아 오지 않고
+    검색 결과 페이지로 가는 링크만 만든다. 고르는 건 사람이 한다(2026-11-05 사용자 결정).
+    강의 DB 에 국비 과정과 같은 모양으로 넣으려고 Course 로 감싼다. 날짜와 금액은 없다.
+    """
+    query = urllib.parse.quote(skill.name)
+    course = Course(
+        course_id="search", degree="0", institution_id="inflearn",
+        title=f"인프런에서 '{skill.name}' 찾기", institution="인프런", address="",
+        start="", end="", target="원격", weekend="", satisfaction=None, capacity=None,
+        applicants=None, total_fee=None, url=INFLEARN_SEARCH_URL.format(query=query),
+    )
+    return Recommendation(skill_id=skill.skill_id, skill_name=skill.name, kind=INFLEARN, course=course)

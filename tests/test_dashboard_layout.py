@@ -5,7 +5,7 @@
 """
 import pytest
 
-from analyze.recommend import DIRECT, FOUNDATION
+from analyze.recommend import DIRECT, FOUNDATION, INFLEARN
 from report.course_notion import (
     COURSE_DB_PROPERTIES,
     COURSE_STATUSES,
@@ -197,7 +197,7 @@ def test_course_database_relates_to_the_skill_database():
     assert [o["name"] for o in props["상태"]["select"]["options"]] == list(COURSE_STATUSES)
     # 하드코딩한 "직접"/"기반" 이 analyze.recommend 의 종류 상수와 갈라지면
     # 강의 DB 의 '연결' 열 값이 추천이 실제로 쓰는 kind 와 달라진다.
-    assert [o["name"] for o in props["연결"]["select"]["options"]] == [DIRECT, FOUNDATION]
+    assert [o["name"] for o in props["연결"]["select"]["options"]] == [DIRECT, FOUNDATION, INFLEARN]
 
 
 def test_course_view_shows_open_recommendations_only():
@@ -259,7 +259,8 @@ def test_course_summary_view_shows_only_the_four_summary_columns():
     ]}
     shown = [c["property_id"] for c in body["configuration"]["properties"] if c["visible"]]
     assert shown == [props[n] for n in COURSE_SUMMARY_COLUMNS]
-    assert COURSE_SUMMARY_COLUMNS == ("스킬", "과정명", "기간", "수업 방식")
+    # 인프런 줄은 링크를 눌러야 쓸모가 있어 첫 화면에도 링크 열을 둔다(2026-11-05).
+    assert COURSE_SUMMARY_COLUMNS == ("스킬", "과정명", "기간", "수업 방식", "링크")
 
 
 def test_course_summary_sits_between_the_chart_and_the_detail_heading():
