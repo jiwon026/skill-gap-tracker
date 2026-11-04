@@ -211,6 +211,39 @@ class TestRoleUnstatedDrives:
         assert "직무 미기재 공채 1건" in capsys.readouterr().out
 
 
+class TestRepostedDuplicates:
+    """다른 사이트 공고를 다시 올리는 소스(REPOSTS)는 원래 소스와 겹치면 뺀다(2026-11-04).
+
+    같은 공고가 두 key 로 들어오면 Notion 에 행이 두 개 생긴다. 빼는 일은 수집이 아니라
+    분석 단계에서 한다. 빠진 공고도 수집된 것으로 남아야 '마감'이 아니라 '제외됨'이 된다.
+    """
+
+    def test_the_repost_is_dropped_and_logged(self, capsys):
+        rows = run.analyze(
+            [
+                posting("1", "데이터 분석가", "<p>SQL 경험</p>"),
+                posting("9", "[테스트커머스] 데이터 분석가", "<p>SQL 경험</p>", source="mirror"),
+            ],
+            reposting=frozenset({"mirror"}),
+        )
+        assert [r.posting.key for r in rows] == ["board:1"]
+        assert "다른 소스와 겹쳐 제외 1건" in capsys.readouterr().out
+
+    def test_a_repost_found_nowhere_else_stays(self):
+        rows = run.analyze(
+            [posting("9", "데이터 분석가", "<p>SQL 경험</p>", source="mirror")],
+            reposting=frozenset({"mirror"}),
+        )
+        assert [r.posting.key for r in rows] == ["mirror:9"]
+
+    def test_reposting_modules_are_read_from_the_flag(self):
+        from types import SimpleNamespace
+
+        modules = [SimpleNamespace(__name__="collect.local.mirror", REPOSTS=True),
+                   SimpleNamespace(__name__="collect.local.board")]
+        assert run._reposting(modules) == frozenset({"mirror"})
+
+
 class TestOrdering:
 
     def test_more_matched_skills_ranks_higher_than_a_better_ratio(self):

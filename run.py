@@ -40,7 +40,8 @@ from report.course_notion import CourseSync
 #: EXHAUSTIVE(목록이 전체인가), fetch_company(company_id)(규모 조회),
 #: EXPERIMENT_SPECS({이름: spec}, 본 파이프라인 밖의 측정용 수집. collect_experiments),
 #: TARGET_SCAN(대상 회사 공고를 직무와 상관없이 더 받는다. fetch_payload 가
-#: is_target(회사명, 제목) 을 받는다. _fetch_local).
+#: is_target(회사명, 제목) 을 받는다. _fetch_local),
+#: REPOSTS(다른 사이트 공고를 다시 올린다. 원래 소스와 겹치면 analyze 가 뺀다).
 #: 모듈 이름이 곧 Posting.source 다.
 LOCAL_PACKAGE = "collect.local"
 
@@ -66,11 +67,17 @@ def _local_sources(package: str = LOCAL_PACKAGE) -> list[ModuleType]:
 
 def _source_name(module: ModuleType) -> str:
     return module.__name__.rsplit(".", 1)[-1]
+
+
+def _reposting(local_modules: Iterable[ModuleType]) -> frozenset[str]:
+    """다른 사이트 공고를 다시 올리는 소스(REPOSTS). 원래 소스와 겹친 공고는 analyze 가 뺀다."""
+    return frozenset(_source_name(m) for m in local_modules if getattr(m, "REPOSTS", False))
 from collect import company_cache
 from collect.schema import CompanyProfile, Posting, is_notice
 from collect.snapshot import write_snapshot
 from extract.boilerplate import find_boilerplate, strip_boilerplate
 from extract.companies import Company, CompanyBook
+from extract.duplicates import reposted_duplicates
 from extract.company_size import classify_size
 from extract.experience import ExperienceBook, match_experiences
 from extract.normalize import to_segments
@@ -259,8 +266,14 @@ def _skill_sources() -> tuple[list[dict], frozenset[str], ExperienceBook]:
     return skill_entries, tool_ids, experience_book
 
 
-def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
-    """직군으로 좁히고, 회사를 묶고, 스킬 갭을 계산한다."""
+def analyze(
+    postings: Iterable[Posting], *, reposting: frozenset[str] = frozenset()
+) -> tuple[AnalyzedPosting, ...]:
+    """직군으로 좁히고, 회사를 묶고, 스킬 갭을 계산한다.
+
+    `reposting` 은 다른 사이트 공고를 다시 올리는 소스다. 원래 소스에도 있는 공고는 뺀다.
+    """
+    postings = list(postings)
     relevance = RelevanceDict.from_config(_config("relevance.yaml"))
     book = CompanyBook.from_config(_config("companies.yaml"))
     skill_entries, tool_ids, experience_book = _skill_sources()
@@ -300,7 +313,11 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
     # 직무를 적지 않은 공채. 직무 표가 이미지에만 있어 필터가 판단할 재료가
     # 없다. 버리지 않고 '확인 필요'로 남겨 사람이 이미지를 보게 한다.
     unconfirmed: set[str] = set()
+    # 같은 공고가 두 소스로 들어오면 Notion 에 행이 두 개 생긴다(extract/duplicates.py).
+    reposted = reposted_duplicates(postings, reposting)
     for posting in postings:
+        if posting.key in reposted:
+            continue
         company = book.identify(posting.company, title=posting.title)
         companies[posting.key] = company
         verdict = classify(
@@ -331,6 +348,8 @@ def analyze(postings: Iterable[Posting]) -> tuple[AnalyzedPosting, ...]:
     # 직무 무관이 셋 중 가장 크게 거른다(2026-09-17: 214건 중 166건).
     # 이걸 안 세던 동안은 relevance.yaml 을 잘못 고쳐 멀쩡한 공고를
     # 걸러내기 시작해도 로그가 그대로였다.
+    if reposted:
+        print(f"  - 다른 소스와 겹쳐 제외 {len(reposted)}건")
     if skipped_role:
         print(f"  - 직무가 맞지 않아 제외 {skipped_role}건")
     if skipped_region:
@@ -757,7 +776,9 @@ def main() -> int:
     tidy_raw_cache(run_date)
 
     publish(
-        attach_company_sizes(analyze(postings), today=datetime.now(KST).date()),
+        attach_company_sizes(
+            analyze(postings, reposting=_reposting(_local_sources())), today=datetime.now(KST).date()
+        ),
         collected={posting.key for posting in postings},
         complete_sources=complete_sources,
         run_date=run_date,
