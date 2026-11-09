@@ -172,7 +172,8 @@ def collect(run_date: str, fetched_at: str) -> tuple[tuple[Posting, ...], frozen
         name, label = _source_name(module), getattr(module, "LABEL", _source_name(module))
         try:
             payload = _fetch_local(module, _raw_cache(name, run_date))
-        except OSError as exc:
+        # ValueError: JSON 이 아닌 응답(점검 페이지)이나 반쯤 쓴 캐시. 그 소스만 건너뛴다.
+        except (OSError, ValueError) as exc:
             print(f"  ! {label}: 수집 실패, 건너뜁니다 — {exc}", file=sys.stderr)
             outcomes.append((name, False, 0))
             continue
@@ -194,7 +195,7 @@ def collect(run_date: str, fetched_at: str) -> tuple[tuple[Posting, ...], frozen
                 payload = saramin.fetch_payload(
                     spec, _raw_cache(f"saramin-{slug}", run_date), access_key
                 )
-            except OSError as exc:
+            except (OSError, ValueError) as exc:
                 print(f"  ! 사람인/{spec.keyword}: 수집 실패 — {exc}", file=sys.stderr)
                 continue
             result = saramin.parse_search(payload, spec, fetched_at=fetched_at)
@@ -489,18 +490,24 @@ def publish(
         print(f"[Notion] 첫 화면 스킬 — {', '.join(featured)}")
 
     # push 뒤에 한다. 오늘 결과에 든 행은 push 가 모집중으로 이미 썼다.
-    retired = sync.retire(
-        active={row.posting.key for row in rows},
-        collected=collected,
-        complete_sources=complete_sources,
-    )
-    print(
-        f"[Notion] 공고 현황 — 제외됨 {retired.excluded} · 마감 {retired.closed}"
-        f" · 변화 없음 {retired.unchanged} · 판단 보류 {retired.skipped}"
-        f" · 실패 {retired.failed}"
-    )
-    if complete_sources:
-        print(f"         (마감 판정한 소스: {', '.join(sorted(complete_sources))})")
+    # 실패해도 대시보드와 강의는 갱신한다. 공고 적재는 이미 끝났고, 못 바꾼
+    # 행은 다음 실행이 다시 판정한다.
+    try:
+        retired = sync.retire(
+            active={row.posting.key for row in rows},
+            collected=collected,
+            complete_sources=complete_sources,
+        )
+    except Exception as exc:
+        print(f"  ! 공고 현황 갱신 실패: {exc}", file=sys.stderr)
+    else:
+        print(
+            f"[Notion] 공고 현황 — 제외됨 {retired.excluded} · 마감 {retired.closed}"
+            f" · 변화 없음 {retired.unchanged} · 판단 보류 {retired.skipped}"
+            f" · 실패 {retired.failed}"
+        )
+        if complete_sources:
+            print(f"         (마감 판정한 소스: {', '.join(sorted(complete_sources))})")
 
     publish_dashboard(rows, created=result.created, run_date=run_date)
 

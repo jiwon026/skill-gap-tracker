@@ -8,11 +8,11 @@ from collect.schema import Posting
 from extract.duplicates import reposted_duplicates
 
 
-def posting(source, source_id, company, title):
+def posting(source, source_id, company, title, deadline="2026-11-30"):
     return Posting(
         source=source, source_id=source_id, company=company, title=title, location="서울",
         url=f"https://example.com/{source}/{source_id}", body_html="", posted_at=None,
-        fetched_at="2026-11-04T10:30:00+09:00",
+        fetched_at="2026-11-04T10:30:00+09:00", deadline=deadline,
     )
 
 
@@ -98,5 +98,22 @@ def test_a_shared_word_is_not_enough_for_a_short_title():
     rows = [
         posting("board", "1", "테스트회계법인", "데이터 분석가"),
         posting("mirror", "9", "EY테스트", "데이터 분석가 채용"),
+    ]
+    assert reposted_duplicates(rows, REPOST) == frozenset()
+
+
+def test_a_long_shared_title_at_a_lookalike_company_needs_the_same_deadline():
+    """이름이 두 글자 겹치는 다른 회사가 흔한 긴 제목을 쓰면 마감일로 가른다."""
+    rows = [
+        posting("board", "1", "테스트뱅크", "데이터 분석 체험형 인턴 채용", deadline="2026-11-20"),
+        posting("mirror", "9", "테스트페이", "[테스트페이] 데이터 분석 체험형 인턴 채용", deadline="2026-11-27"),
+    ]
+    assert reposted_duplicates(rows, REPOST) == frozenset()
+
+
+def test_the_lookalike_rule_does_not_guess_when_a_deadline_is_unknown():
+    rows = [
+        posting("board", "1", "테스트회계법인", "컨설팅부문 수요예측 데이터 분석 인턴 채용", deadline=None),
+        posting("mirror", "9", "EY테스트", "[EY테스트] 컨설팅부문 수요예측 데이터 분석 인턴", deadline=None),
     ]
     assert reposted_duplicates(rows, REPOST) == frozenset()

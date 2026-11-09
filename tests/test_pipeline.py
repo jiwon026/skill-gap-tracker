@@ -1148,3 +1148,65 @@ class TestTargetCompanyWithoutTier:
                     company="플랫폼회사")
         ])
         assert assign_priority(rows[0]) != "낮음"
+
+
+class TestCollectSurvivesABadSource:
+    """한 소스가 JSON 이 아닌 응답(점검 페이지, 반쯤 쓴 캐시)을 줘도 나머지는 돈다."""
+
+    def _module(self, name, fetch):
+        from types import SimpleNamespace
+
+        def parse_board(payload, spec, *, fetched_at):
+            return SimpleNamespace(postings=[], skipped=[])
+
+        return SimpleNamespace(
+            __name__=f"collect.local.{name}", DEFAULT_SPEC="spec", EXHAUSTIVE=True,
+            fetch_payload=fetch, parse_board=parse_board,
+        )
+
+    def test_a_value_error_skips_only_that_source(self, monkeypatch, capsys):
+        import json
+
+        calls = []
+
+        def broken(spec, cache_path):
+            return json.loads("<html>점검 중</html>")
+
+        def healthy(spec, cache_path):
+            calls.append("healthy")
+            return {"complete": True}
+
+        modules = [self._module("broken", broken), self._module("healthy", healthy)]
+        monkeypatch.setattr(run, "_local_sources", lambda: modules)
+        monkeypatch.setattr(run, "_config", lambda name: {})
+        monkeypatch.setattr(run.saramin, "access_key_from_env", lambda: None)
+
+        postings, complete = run.collect("2026-11-09", "2026-11-09T10:30:00+09:00")
+
+        assert calls == ["healthy"]
+        assert postings == ()
+        assert "broken" not in complete
+        assert "수집 실패" in capsys.readouterr().err
+
+
+class TestPublishSurvivesAFailedRetire:
+    """마감 판정이 실패해도 대시보드와 강의는 갱신한다. 공고 적재는 이미 끝났다."""
+
+    def test_the_dashboard_still_runs(self, monkeypatch, capsys):
+        from report.notion import SyncResult
+
+        class FakeSync:
+            def push(self, rows, names, *, featured_skills=()):
+                return SyncResult(created=1, updated=0, failed=0)
+
+            def retire(self, *, active, collected, complete_sources):
+                raise OSError("Notion 500")
+
+        monkeypatch.setattr(run.NotionSync, "from_env", classmethod(lambda cls: FakeSync()))
+        called = []
+        monkeypatch.setattr(run, "publish_dashboard", lambda rows, **kw: called.append(kw))
+
+        run.publish((), collected=set(), complete_sources=frozenset(), run_date="2026-11-09")
+
+        assert called == [{"created": 1, "run_date": "2026-11-09"}]
+        assert "Notion 500" in capsys.readouterr().err

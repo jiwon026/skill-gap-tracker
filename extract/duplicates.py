@@ -11,6 +11,9 @@ key 가 달라 Notion 에 행이 두 개 생기고, 한쪽에 적은 '상태'가
 
 법인명과 브랜드명이 갈리는 회사도 있다(한쪽은 'OO회계법인', 다른 쪽은 브랜드명). 제목이
 길게 겹치면(공백, 기호를 지우고 12자 이상) 회사 이름은 두 글자만 함께 있어도 같다고 본다.
+이 예비 규칙은 마감일이 같을 때만 쓴다. 이름이 두 글자 겹치는 다른 회사도 흔한 긴 제목
+('데이터 분석 체험형 인턴 채용')을 쓰는데, 같은 공고라면 마감일이 같고 다른 회사라면 대개
+다르다. 마감일을 모르면 빼지 않는다. 행이 하나 더 남는 쪽이 공고를 놓치는 쪽보다 낫다.
 
 판정은 수집이 아니라 분석 단계에서 쓴다. 빠진 공고도 '수집됨'으로 남아야 Notion 에서
 '마감'이 아니라 '제외됨'으로 표시된다.
@@ -60,7 +63,12 @@ def _same(repost: Posting, original: Posting) -> bool:
     companies = _company(repost.company), _company(original.company)
     if _overlaps(*companies, minimum=2):
         return True
-    return min(map(len, titles)) >= _LONG_TITLE and _shares_two_chars(*companies)
+    return (
+        min(map(len, titles)) >= _LONG_TITLE
+        and repost.deadline is not None
+        and repost.deadline == original.deadline
+        and _shares_two_chars(*companies)
+    )
 
 
 def reposted_duplicates(postings: Iterable[Posting], reposting: Collection[str]) -> frozenset[str]:
