@@ -112,7 +112,7 @@ def _text(value: str) -> dict[str, Any]:
 def _choice(label: str) -> dict[str, Any]:
     """select 값. multi_select와 똑같이 쉼표를 못 쓰고 길이 상한이 있다.
 
-    사람인 회사명은 정제되지 않은 법인명이라 쉼표가 들어온다. 그대로
+    소스가 준 회사명이 정제되지 않은 법인명이면 쉼표가 들어온다. 그대로
     보내면 그 행만 400으로 실패해 영구히 적재되지 않는다.
     """
     cleaned = (label or "").replace(",", " ").strip()[:_MAX_OPTIONS]

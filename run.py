@@ -6,8 +6,7 @@
 돌릴 수 있어야 하기 때문이다. 좁히는 일은 전부 스냅샷 이후에 한다.
 
 소스 하나가 죽어도 나머지 결과로 리포트가 나와야 하므로, 소스 단위로
-예외를 가둔다. 자격증명이 없는 소스(사람인)와 목적지(Notion)는 경고만
-남기고 건너뛴다 — 키 발급을 기다리는 동안에도 파이프라인이 돌아야 한다.
+예외를 가둔다. 자격증명이 없는 목적지(Notion)는 경고만 남기고 건너뛴다.
 """
 from __future__ import annotations
 
@@ -29,7 +28,6 @@ from analyze.gap import AnalyzedPosting, compute_gap
 from analyze.priority import assign_priority, priority_rank
 from analyze.recommend import Recommendation, recommend, search_link, search_terms, target_skills
 from analyze.skill_board import SkillRow, build_skill_rows
-from collect import saramin
 from collect.raw_cache import compress_old
 from collect.training import REQUEST_INTERVAL_SEC, fetch_own_fee, prune_cache, search_courses, with_own_fee
 from report.course_notion import CourseSync
@@ -120,30 +118,25 @@ def _training_config() -> dict:
     return _config("training.yaml")
 
 
-def _enabled(entries: Iterable[dict]) -> list[dict]:
-    return [e for e in entries if e.get("enabled", True)]
-
-
 def _raw_cache(name: str, run_date: str) -> Path:
     return ROOT / "store" / "raw" / f"{name}-{run_date}.json"
 
 
-#: 전체 목록을 주는 소스. 여기서 공고가 사라졌다면 마감으로 볼 수 있다.
-#: 사람인은 키워드 검색이고 페이지 상한이 있어서, 목록에 없다고 마감이 아니다.
-#: 지금 저장소의 공개 소스 중에는 없다. 개인용 수집기는 EXHAUSTIVE 로 스스로
-#: 밝히고, 목록을 끝까지 못 본 날은 complete=False 를 줘서 그날 실패로 기록된다.
-EXHAUSTIVE_SOURCES: frozenset[str] = frozenset()
-
-
 def _exhaustive(local_modules: Iterable[ModuleType]) -> frozenset[str]:
-    return EXHAUSTIVE_SOURCES | {
+    """전체 목록을 주는 소스. 여기서 공고가 사라졌다면 마감으로 볼 수 있다.
+
+    수집기가 EXHAUSTIVE 로 스스로 밝히고, 목록을 끝까지 못 본 날은
+    complete=False 를 줘서 그날 실패로 기록된다. 검색형 소스는 목록에 없다고
+    마감이 아니므로 EXHAUSTIVE 를 켜지 않는다.
+    """
+    return frozenset(
         _source_name(m) for m in local_modules if getattr(m, "EXHAUSTIVE", False)
-    }
+    )
 
 
 def _complete_sources(
     outcomes: Iterable[tuple[str, bool, int]],
-    exhaustive: frozenset[str] = EXHAUSTIVE_SOURCES,
+    exhaustive: frozenset[str],
 ) -> frozenset[str]:
     """(소스, 수집 성공 여부, 건수) 목록에서 '목록이 완전한' 소스를 고른다.
 
@@ -163,7 +156,6 @@ def _complete_sources(
 
 def collect(run_date: str, fetched_at: str) -> tuple[tuple[Posting, ...], frozenset[str]]:
     """공고와, 목록이 완전하게 수집된 소스 집합을 함께 돌려준다."""
-    sources = _config("sources.yaml")
     collected: list[Posting] = []
     outcomes: list[tuple[str, bool, int]] = []
 
@@ -182,25 +174,6 @@ def collect(run_date: str, fetched_at: str) -> tuple[tuple[Posting, ...], frozen
         outcomes.append((name, bool(payload.get("complete")), len(result.postings) + len(result.skipped)))
         collected.extend(result.postings)
         _report_source(label, result)
-
-    access_key = saramin.access_key_from_env()
-    saramin_specs = _enabled(sources.get("saramin", ()))
-    if saramin_specs and not access_key:
-        print("  - 사람인: SARAMIN_ACCESS_KEY 가 없어 건너뜁니다", file=sys.stderr)
-    elif access_key:
-        for entry in saramin_specs:
-            spec = saramin.KeywordSpec(**entry)
-            slug = spec.keyword.replace(" ", "")
-            try:
-                payload = saramin.fetch_payload(
-                    spec, _raw_cache(f"saramin-{slug}", run_date), access_key
-                )
-            except (OSError, ValueError) as exc:
-                print(f"  ! 사람인/{spec.keyword}: 수집 실패 — {exc}", file=sys.stderr)
-                continue
-            result = saramin.parse_search(payload, spec, fetched_at=fetched_at)
-            collected.extend(result.postings)
-            _report_source(f"사람인 '{spec.keyword}'", result)
 
     return _dedupe(collected), _complete_sources(outcomes, _exhaustive(local_modules))
 
@@ -234,8 +207,8 @@ def _fetch_local(module: ModuleType, cache_path: Path) -> Mapping[str, Any]:
 def _dedupe(postings: Iterable[Posting]) -> tuple[Posting, ...]:
     """같은 key를 한 번만 남긴다.
 
-    사람인은 키워드마다 따로 검색하므로 '데이터 분석'과 '데이터 분석가'가
-    같은 공고를 함께 준다. 중복을 그대로 두면 Notion이 같은 공고에 대해
+    수집기 하나가 목록을 여러 번 받으면(직무 분류별 보드, 대상 회사 훑기) 같은
+    공고가 두 번 들어온다. 중복을 그대로 두면 Notion이 같은 공고에 대해
     create를 두 번 하고(쿼리 인덱스가 즉시 갱신되지 않는다), 그중 하나에
     사용자가 적어 둔 '상태'가 다음 실행부터 보이지 않게 된다.
     """

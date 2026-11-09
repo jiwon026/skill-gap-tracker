@@ -262,14 +262,14 @@ class TestOrdering:
 
 class TestDedupe:
     def test_same_key_is_kept_once(self):
-        """사람인 키워드 두 개가 같은 공고를 준다."""
-        duplicated = [posting("1", "데이터 분석가", "<p>SQL</p>", source="saramin")] * 2
+        """수집기가 목록을 여러 번 받으면 같은 공고가 두 번 온다."""
+        duplicated = [posting("1", "데이터 분석가", "<p>SQL</p>", source="board")] * 2
         assert len(run._dedupe(duplicated)) == 1
 
     def test_same_id_from_different_sources_is_not_a_duplicate(self):
         rows = run._dedupe(
             [
-                posting("1", "데이터 분석가", "<p>SQL</p>", source="saramin"),
+                posting("1", "데이터 분석가", "<p>SQL</p>", source="search"),
                 posting("1", "데이터 분석가", "<p>SQL</p>", source="board"),
             ]
         )
@@ -353,18 +353,12 @@ class TestCompleteSources:
         assert run._complete_sources(outcomes, self.EXHAUSTIVE) == frozenset()
 
     def test_search_sources_are_never_complete(self):
-        """사람인은 키워드 검색 + 페이지 상한이라 목록이 전체가 아니다."""
-        assert run._complete_sources([("saramin", True, 500)], self.EXHAUSTIVE) == frozenset()
+        """키워드 검색 + 페이지 상한인 소스는 목록이 전체가 아니다."""
+        assert run._complete_sources([("search", True, 500)], self.EXHAUSTIVE) == frozenset()
 
     def test_sources_are_judged_independently(self):
         outcomes = [("boards", False, 0), ("board", True, 54)]
         assert run._complete_sources(outcomes, self.EXHAUSTIVE) == frozenset({"board"})
-
-    def test_the_default_set_is_empty(self):
-        """저장소에 남은 공개 소스 중 완전 소스는 없다. 개인용 수집기는
-        EXHAUSTIVE 로 스스로 밝히므로 기본값에 없다."""
-        assert run.EXHAUSTIVE_SOURCES == frozenset()
-        assert run._complete_sources([("board", True, 54)]) == frozenset()
 
 
 class TestRegion:
@@ -442,7 +436,7 @@ class TestCompanySizes:
             posting("1", "데이터 분석가", self.BODY, company="작은회사", source="board", company_id="C1"),
             posting("2", "데이터 분석가", self.BODY, company="쿠팡", source="board", company_id="C2"),
             posting("3", "데이터 분석가", self.BODY, company="아이디없음", source="board"),
-            posting("4", "데이터 분석가", self.BODY, company="사람인회사", source="saramin", company_id="S1"),
+            posting("4", "데이터 분석가", self.BODY, company="검색회사", source="search", company_id="S1"),
         ])
 
     def _attach(self, tmp_path, answers):
@@ -468,7 +462,7 @@ class TestCompanySizes:
 
     def test_sources_without_company_info_stay_etc(self, tmp_path):
         scales, _ = self._attach(tmp_path, {})
-        assert scales["사람인회사"] == "기타"
+        assert scales["검색회사"] == "기타"
         assert scales["아이디없음"] == "기타"
 
     def test_order_and_count_are_unchanged(self, tmp_path):
@@ -517,11 +511,11 @@ class TestLocalSources:
 
         board = SimpleNamespace(__name__="collect.local.board", EXHAUSTIVE=True)
         search = SimpleNamespace(__name__="collect.local.search")
-        assert run._exhaustive([board, search]) == run.EXHAUSTIVE_SOURCES | {"board"}
+        assert run._exhaustive([board, search]) == {"board"}
 
     def test_complete_sources_uses_the_given_exhaustive_set(self):
         outcomes = [("board", True, 5)]
-        assert run._complete_sources(outcomes) == frozenset()
+        assert run._complete_sources(outcomes, frozenset()) == frozenset()
         assert run._complete_sources(outcomes, frozenset({"board"})) == frozenset({"board"})
 
 
@@ -1178,8 +1172,6 @@ class TestCollectSurvivesABadSource:
 
         modules = [self._module("broken", broken), self._module("healthy", healthy)]
         monkeypatch.setattr(run, "_local_sources", lambda: modules)
-        monkeypatch.setattr(run, "_config", lambda name: {})
-        monkeypatch.setattr(run.saramin, "access_key_from_env", lambda: None)
 
         postings, complete = run.collect("2026-11-09", "2026-11-09T10:30:00+09:00")
 

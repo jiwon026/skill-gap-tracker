@@ -7,7 +7,7 @@
 #     powershell -ExecutionPolicy Bypass -File install_schedule.ps1 -At 10:30
 #
 # 관리자 권한이 필요 없다. 현재 사용자 계정으로 등록되므로 사용자 환경변수
-# (NOTION_TOKEN, SARAMIN_ACCESS_KEY)를 그대로 물려받는다. SYSTEM 계정으로
+# (NOTION_TOKEN 등)를 그대로 물려받는다. SYSTEM 계정으로
 # 등록하면 그 환경변수가 없어 조용히 아무것도 안 하게 된다.
 
 param(

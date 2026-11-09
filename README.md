@@ -94,15 +94,7 @@ Notion에는 공고마다 이런 행이 생긴다.
 
 ## 데이터 소스
 
-공개 저장소의 수집기는 공식 오픈 API만 쓴다. 요청 사이에 1초를 두고 하루 한 번 받아 캐시한다.
-
-| 소스 | 비고 |
-|---|---|
-| 사람인 오픈 API | `SARAMIN_ACCESS_KEY` 필요. 본문을 주지 않아 본문 대신 키워드와 직무코드를 쓴다 |
-
-그 밖의 개인용 수집기는 `collect/local/`에 두면 `run.py`가 자동으로 붙인다. 이 폴더는 저장소에 포함하지 않는다.
-
-> 사람인 데이터를 쓴 결과물에는 **Powered by 취업 사람인** 출처 표기가 필요하다.
+수집기는 `collect/local/`에 두면 `run.py`가 자동으로 붙인다. 이 폴더는 저장소에 포함하지 않는다. 수집기는 요청 사이에 1초를 두고 하루 한 번 받아 캐시한다.
 
 ### 받아 온 것을 어디에 두나
 
@@ -139,7 +131,6 @@ cp config/companies.example.yaml  config/companies.yaml    # 지원 대상 회�
 | 환경변수 | 없으면 |
 |---|---|
 | `NOTION_TOKEN`, `NOTION_DATABASE_ID` | Notion 적재를 건너뛰고 콘솔 출력까지만 |
-| `SARAMIN_ACCESS_KEY` | 사람인을 건너뛴다 |
 
 ### Notion 준비
 

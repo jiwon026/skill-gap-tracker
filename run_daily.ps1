@@ -55,7 +55,7 @@ if (-not (Test-Path $python)) {
 
 Write-Log "[$stamp] Skill Gap Tracker 시작"
 
-# stdout·stderr 를 함께 남긴다. 사람인 키 누락 같은 경고가 stderr 로 나가는데,
+# stdout·stderr 를 함께 남긴다. Notion 키 누락 같은 경고가 stderr 로 나가는데,
 # 그것만 놓치면 왜 결과가 비었는지 알 수 없다.
 & cmd.exe /c "`"$python`" run.py >> `"$logFile`" 2>&1"
 $code = $LASTEXITCODE

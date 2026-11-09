@@ -269,7 +269,7 @@ class TestSelectSanitizing:
 
 class TestDuplicateKeysWithinOneRun:
     def test_same_key_twice_creates_only_one_row(self):
-        """사람인 키워드 두 개가 같은 공고를 준다. 두 번 create 하면 중복 행이 남고
+        """한 실행에 같은 공고가 두 번 들어온다. 두 번 create 하면 중복 행이 남고
         사용자가 편집한 '상태'가 다음 실행부터 보이지 않게 된다."""
         client = FakeNotion()
         result = NotionSync(client).push([make_analyzed(), make_analyzed()], SKILL_NAMES)
@@ -358,13 +358,13 @@ class TestListingStatus:
         assert listing_status("board:9", **kw) is None
 
     def test_search_sources_are_never_judged_closed(self):
-        """사람인은 키워드 검색이라 목록에 없다고 마감이 아니다."""
-        assert listing_status("saramin:77", **self.KW) is None
+        """키워드 검색 소스는 목록에 없다고 마감이 아니다."""
+        assert listing_status("search:77", **self.KW) is None
 
     def test_collected_from_an_incomplete_source_is_still_excluded(self):
         """수집됐다는 것도, 필터에 걸렸다는 것도 확실하다."""
-        kw = dict(active=set(), collected={"saramin:5"}, complete_sources=frozenset())
-        assert listing_status("saramin:5", **kw) == "제외됨"
+        kw = dict(active=set(), collected={"search:5"}, complete_sources=frozenset())
+        assert listing_status("search:5", **kw) == "제외됨"
 
     def test_statuses_run_from_open_to_closed(self):
         """Notion select 는 옵션 순서대로 정렬된다."""
@@ -418,7 +418,7 @@ class TestRetire:
         assert result.unchanged == 1
 
     def test_unknown_rows_are_left_alone(self):
-        client = self._client({"saramin:7": ("p7", "모집중")})
+        client = self._client({"search:7": ("p7", "모집중")})
         result = self._retire(client)
         assert client.updated == []
         assert result.skipped == 1

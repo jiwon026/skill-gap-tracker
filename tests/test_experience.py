@@ -83,7 +83,7 @@ class TestMatching:
         assert "text_analysis" in {h.id for h in hits}
 
     def test_title_alone_can_match(self, book):
-        """본문이 없는 소스(사람인)도 제목만으로 어필 근거가 잡혀야 한다."""
+        """본문이 없는 공고(이미지 본문)도 제목만으로 어필 근거가 잡혀야 한다."""
         hits = match_experiences("리텐션 분석 담당자", "", book)
         assert hits
 

@@ -96,8 +96,7 @@ def test_title_exclusion_still_rejects_the_whole_posting(dictionary):
 
 def test_excluded_department_is_dropped_not_fatal(dictionary):
     """공채는 여러 직무를 부서로 싣는다. '데이터 엔지니어'가 섞였다고 '데이터
-    분석가'까지 버리면 데이터 직무가 포함된 공채가 전부 사라진다. 사람인
-    직무코드도 같은 모양이다."""
+    분석가'까지 버리면 데이터 직무가 포함된 공채가 전부 사라진다."""
     verdict = classify(
         "2026 하반기 신입·경력 집중 채용 #공채",
         ("퍼포먼스 마케터", "데이터 분석가", "데이터 엔지니어"),

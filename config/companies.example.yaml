@@ -8,7 +8,7 @@
 #     cp config/companies.example.yaml config/companies.yaml
 #
 # 쓰이는 곳
-#   1. 사람인처럼 전 산업 공고가 섞여 오는 소스를 회사명으로 좁힌다.
+#   1. 전 산업 공고가 섞여 오는 목록(신입 목록 훑기)을 회사명으로 좁힌다.
 #   2. 우선순위 — 여기 없는 회사는 한 단계 내린다(analyze/priority.py).
 #   3. Notion '규모' 열 — 여기 적은 tier 가 소스 회사 정보보다 이긴다.
 #
