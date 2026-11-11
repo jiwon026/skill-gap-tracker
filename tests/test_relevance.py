@@ -322,6 +322,11 @@ class TestRoleUnstated:
         assert role_unstated("2026 신입 공채 채용설명회", ("2026 신입 공채 채용설명회",), dictionary) is False
         assert classify("2027년도 신입직원 채용설명회", ("데이터 분석",), dictionary).relevant is False
 
+    def test_bootcamp_ads_are_not_postings(self, dictionary):
+        """교육기관이 채용 게시판에 올린 부트캠프 광고는 공고가 아니다(2026-11-11)."""
+        title = "[테스트연구소] 이직 준비하는 직장인 필독! 데이터 분석 9주 부트캠프"
+        assert classify(title, (title,), dictionary).relevant is False
+
     def test_an_info_session_tag_on_a_department_keeps_the_role(self, dictionary):
         """'#설명회'는 공고에 붙는 꼬리표다. 공고와 그 직무는 그대로 본다."""
         assert classify("2026 공채", ("데이터 분석 #설명회",), dictionary).relevant
