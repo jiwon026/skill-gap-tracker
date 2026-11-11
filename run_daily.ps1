@@ -57,7 +57,9 @@ Write-Log "[$stamp] Skill Gap Tracker 시작"
 
 # stdout·stderr 를 함께 남긴다. Notion 키 누락 같은 경고가 stderr 로 나가는데,
 # 그것만 놓치면 왜 결과가 비었는지 알 수 없다.
-& cmd.exe /c "`"$python`" run.py >> `"$logFile`" 2>&1"
+# -u 는 출력을 모아 두지 않고 바로 쓴다. 30분 제한으로 강제 종료된 날 모아 둔 출력이
+# 사라져 어디서 멈췄는지 알 수 없었다(2026-11-11).
+& cmd.exe /c "`"$python`" -u run.py >> `"$logFile`" 2>&1"
 $code = $LASTEXITCODE
 
 Write-Log "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] 종료 코드 $code"
