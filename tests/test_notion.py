@@ -60,6 +60,7 @@ class FakeNotion:
     def __init__(self, existing=None):
         self.existing = existing or {}
         self.listing = {}
+        self.closing = {}
         self.created, self.updated, self.queried = [], [], []
 
     def find_page_id(self, key):
@@ -74,9 +75,9 @@ class FakeNotion:
         self.updated.append((page_id, properties))
 
     def iter_rows(self):
-        """(page_id, key, 공고 현황). 현황은 listing 에 따로 적어 둔다."""
+        """(page_id, key, 공고 현황, 마감). 현황과 마감은 listing, closing 에 따로 적어 둔다."""
         for key, page_id in self.existing.items():
-            yield page_id, key, self.listing.get(key)
+            yield page_id, key, self.listing.get(key), self.closing.get(key, "")
 
 
 class TestProperties:
@@ -366,6 +367,25 @@ class TestListingStatus:
         kw = dict(active=set(), collected={"search:5"}, complete_sources=frozenset())
         assert listing_status("search:5", **kw) == "제외됨"
 
+    def test_a_past_deadline_is_closed_even_when_the_source_failed(self):
+        """수집이 막힌 소스(429)는 마감 판정을 멈춘다. 그래도 마감일이 지났다는 건
+        확실하다(2026-11-18: 마감 지난 공고 10건이 모집중으로 남았다)."""
+        kw = {**self.KW, "complete_sources": frozenset()}
+        assert listing_status("board:9", closing="2026-11-17", today="2026-11-18", **kw) == "마감"
+
+    def test_the_deadline_day_itself_is_still_open(self):
+        kw = {**self.KW, "complete_sources": frozenset()}
+        assert listing_status("board:9", closing="2026-11-18", today="2026-11-18", **kw) is None
+
+    def test_non_date_closing_text_is_not_a_deadline(self):
+        kw = {**self.KW, "complete_sources": frozenset()}
+        for closing in ("상시채용", "채용시 마감 (10/27 게시)", ""):
+            assert listing_status("board:9", closing=closing, today="2026-11-18", **kw) is None
+
+    def test_todays_results_win_over_a_past_deadline(self):
+        """오늘 결과에 있으면 소스가 아직 받고 있다는 뜻이다. push 가 모집중으로 쓴다."""
+        assert listing_status("board:1", closing="2026-11-01", today="2026-11-18", **self.KW) == "모집중"
+
     def test_statuses_run_from_open_to_closed(self):
         """Notion select 는 옵션 순서대로 정렬된다."""
         assert LISTING_STATUSES == ("모집중", "제외됨", "마감")
@@ -390,8 +410,17 @@ class TestRetire:
         return client
 
     def _retire(self, client, **kw):
-        base = dict(active=set(), collected=set(), complete_sources=frozenset({"board"}))
+        base = dict(
+            active=set(), collected=set(), complete_sources=frozenset({"board"}), today="2026-11-18"
+        )
         return NotionSync(client).retire(**{**base, **kw})
+
+    def test_a_row_past_its_deadline_is_closed_on_a_failed_day(self):
+        client = self._client({"board:9": ("p9", "모집중")})
+        client.closing = {"board:9": "2026-11-15"}
+        result = self._retire(client, complete_sources=frozenset())
+        assert client.updated == [("p9", {"공고 현황": {"select": {"name": "마감"}}})]
+        assert result.closed == 1
 
     def test_filtered_row_is_marked_excluded(self):
         client = self._client({"board:2": ("p2", "모집중")})
@@ -445,7 +474,7 @@ class TestRetire:
         client = Flaky(existing={"board:8": "bad", "board:9": "p9"})
         client.listing = {"board:8": "모집중", "board:9": "모집중"}
         result = NotionSync(client).retire(
-            active=set(), collected=set(), complete_sources=frozenset({"board"})
+            active=set(), collected=set(), complete_sources=frozenset({"board"}), today="2026-11-18"
         )
         assert result.closed == 1 and result.failed == 1
 
@@ -457,7 +486,7 @@ class TestIterRowsContract:
         from report.notion import HttpNotionClient
 
         pages = [
-            {"results": [_row("p1", "board:1", "모집중")], "has_more": True, "next_cursor": "c2"},
+            {"results": [_row("p1", "board:1", "모집중", "2026-11-30")], "has_more": True, "next_cursor": "c2"},
             {"results": [_row("p2", "board:2", None)], "has_more": False},
         ]
         sent = []
@@ -468,16 +497,17 @@ class TestIterRowsContract:
             return type("R", (), {"read": lambda self: _json.dumps(body).encode()})()
 
         rows = list(HttpNotionClient("t", "db", opener=opener).iter_rows())
-        assert rows == [("p1", "board:1", "모집중"), ("p2", "board:2", None)]
+        assert rows == [("p1", "board:1", "모집중", "2026-11-30"), ("p2", "board:2", None, "")]
         assert sent[1]["start_cursor"] == "c2"
 
 
-def _row(page_id, key, listing):
+def _row(page_id, key, listing, closing=""):
     return {
         "id": page_id,
         "properties": {
             "key": {"rich_text": [{"plain_text": key}]},
             "공고 현황": {"select": {"name": listing} if listing else None},
+            "마감": {"rich_text": [{"plain_text": closing}] if closing else []},
         },
     }
 

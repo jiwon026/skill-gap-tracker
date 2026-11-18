@@ -470,6 +470,7 @@ def publish(
             active={row.posting.key for row in rows},
             collected=collected,
             complete_sources=complete_sources,
+            today=run_date,
         )
     except Exception as exc:
         print(f"  ! 공고 현황 갱신 실패: {exc}", file=sys.stderr)

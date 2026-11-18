@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.request
 from dataclasses import dataclass
@@ -53,12 +54,14 @@ OPEN, EXCLUDED, CLOSED = LISTING_STATUSES
 #: Notion multi_select 옵션 하나의 상한. 넘으면 요청 전체가 400이 된다.
 _MAX_OPTIONS = 100
 
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
 
 class NotionClient(Protocol):
     def find_page_id(self, key: str) -> str | None: ...
     def create_page(self, properties: Mapping[str, Any]) -> str: ...
     def update_page(self, page_id: str, properties: Mapping[str, Any]) -> None: ...
-    def iter_rows(self) -> Iterator[tuple[str, str, str | None]]: ...
+    def iter_rows(self) -> Iterator[tuple[str, str, str | None, str]]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +86,8 @@ def listing_status(
     active: Iterable[str],
     collected: Iterable[str],
     complete_sources: Iterable[str],
+    closing: str = "",
+    today: str = "",
 ) -> str | None:
     """행 하나의 공고 현황. 판단할 근거가 없으면 None 이다.
 
@@ -92,13 +97,20 @@ def listing_status(
 
       오늘 결과에 있다                          → 모집중
       오늘 수집은 됐는데 필터에 걸렸다           → 제외됨
+      '마감' 열의 날짜가 오늘보다 앞선다          → 마감
       목록이 완전한 소스에서 공고가 사라졌다      → 마감
       그 밖(수집 실패, 검색형 소스)             → None, 건드리지 않는다
+
+    마감일 규칙은 소스가 흔들린 날에도 믿을 수 있다. 수집이 막혀 마감 판정을
+    멈춘 소스의 지난 공고가 모집중으로 남던 것을 막는다(2026-11-18).
+    `closing`은 Notion '마감' 열의 글자다. 날짜(YYYY-MM-DD)일 때만 본다.
     """
     if key in set(active):
         return OPEN
     if key in set(collected):
         return EXCLUDED
+    if today and _ISO_DATE.fullmatch(closing) and closing < today:
+        return CLOSED
     source = key.split(":", 1)[0]
     if source in set(complete_sources):
         return CLOSED
@@ -264,8 +276,8 @@ class HttpNotionClient:
     def update_page(self, page_id: str, properties: Mapping[str, Any]) -> None:
         self._request("PATCH", f"/pages/{page_id}", {"properties": properties})
 
-    def iter_rows(self) -> Iterator[tuple[str, str, str | None]]:
-        """DB 의 모든 행을 (page_id, key, 공고 현황)으로 훑는다.
+    def iter_rows(self) -> Iterator[tuple[str, str, str | None, str]]:
+        """DB 의 모든 행을 (page_id, key, 공고 현황, 마감)으로 훑는다.
 
         휴지통으로 보낸 행은 Notion 조회에 나오지 않는다.
         """
@@ -278,15 +290,22 @@ class HttpNotionClient:
 
             for page in payload.get("results") or ():
                 props = page.get("properties") or {}
-                key = "".join(
-                    t.get("plain_text", "") for t in (props.get("key") or {}).get("rich_text") or ()
-                ).strip()
                 selected = (props.get("공고 현황") or {}).get("select") or {}
-                yield page.get("id", ""), key, selected.get("name")
+                yield (
+                    page.get("id", ""), _plain(props, "key"), selected.get("name"),
+                    _plain(props, "마감"),
+                )
 
             if not payload.get("has_more"):
                 return
             cursor = payload.get("next_cursor")
+
+
+def _plain(props: Mapping[str, Any], name: str) -> str:
+    """rich_text 속성의 글자. 없으면 빈 문자열이다."""
+    return "".join(
+        t.get("plain_text", "") for t in (props.get(name) or {}).get("rich_text") or ()
+    ).strip()
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,6 +365,7 @@ class NotionSync:
         active: Iterable[str],
         collected: Iterable[str],
         complete_sources: Iterable[str],
+        today: str,
     ) -> RetireResult:
         """오늘 결과에 없는 행의 '공고 현황'을 제외됨·마감으로 바꾼다.
 
@@ -356,7 +376,7 @@ class NotionSync:
         complete_set = frozenset(complete_sources)
         excluded = closed = unchanged = skipped = failed = 0
 
-        for page_id, key, current in self.client.iter_rows():
+        for page_id, key, current, closing in self.client.iter_rows():
             if not key:
                 # 사용자가 손으로 추가한 행일 수 있다.
                 skipped += 1
@@ -366,7 +386,8 @@ class NotionSync:
                 continue
 
             target = listing_status(
-                key, active=active_set, collected=collected_set, complete_sources=complete_set
+                key, active=active_set, collected=collected_set, complete_sources=complete_set,
+                closing=closing, today=today,
             )
             if target is None:
                 skipped += 1

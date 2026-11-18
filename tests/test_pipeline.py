@@ -619,7 +619,7 @@ class TestPublish:
             def push(self, rows, names, *, featured_skills=()):
                 return SyncResult(created=3, updated=0, failed=0)
 
-            def retire(self, *, active, collected, complete_sources):
+            def retire(self, *, active, collected, complete_sources, today):
                 return RetireResult(excluded=0, closed=0, unchanged=0, skipped=0, failed=0)
 
         monkeypatch.setattr(run.NotionSync, "from_env", classmethod(lambda cls: FakeSync()))
@@ -1191,7 +1191,7 @@ class TestPublishSurvivesAFailedRetire:
             def push(self, rows, names, *, featured_skills=()):
                 return SyncResult(created=1, updated=0, failed=0)
 
-            def retire(self, *, active, collected, complete_sources):
+            def retire(self, *, active, collected, complete_sources, today):
                 raise OSError("Notion 500")
 
         monkeypatch.setattr(run.NotionSync, "from_env", classmethod(lambda cls: FakeSync()))
